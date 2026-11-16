@@ -18,7 +18,7 @@ import {
   Select,
   Text,
 } from "@ui5/webcomponents-react";
-import { BULK_LIMIT, bulkAssign, recheckBulk, retryBulk, type BulkResult } from "@/lib/skills/repository";
+import { BULK_LIMIT, bulkAssign, recheckBulk, retryBulk, type BulkResult } from "@/lib/skills/bulk";
 import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
 import { toUserMessage } from "@/lib/errors";
 import { formatDate, formatPersonType } from "@/lib/format";

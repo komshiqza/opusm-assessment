@@ -1,4 +1,4 @@
-import { BULK_LIMIT, type BulkResult } from "@/lib/skills/repository";
+import { BULK_LIMIT, type BulkResult } from "@/lib/skills/bulk";
 
 /**
  * Preview of a bulk assignment: who gets the skill and who is skipped because they already have it.

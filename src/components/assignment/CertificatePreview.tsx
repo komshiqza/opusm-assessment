@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bar, BusyIndicator, Button, Dialog, MessageStrip } from "@ui5/webcomponents-react";
-import { loadCertificateFile } from "@/lib/skills/repository";
+import { loadCertificateFile } from "@/lib/skills/certificates";
 import { toUserMessage } from "@/lib/errors";
 import type { Certificate } from "@/lib/skills/types";
 import { saveCertificate } from "./saveCertificate";

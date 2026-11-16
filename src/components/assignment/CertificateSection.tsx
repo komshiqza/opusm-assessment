@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BusyIndicator, Button, FileUploader, Icon, Link, MessageStrip, Text, Title } from "@ui5/webcomponents-react";
-import { deleteCertificate, recheckUploads, retryItems, uploadCertificates, type UploadItem, type UploadOutcome } from "@/lib/skills/repository";
+import { deleteCertificate, recheckUploads, retryItems, uploadCertificates, type UploadItem, type UploadOutcome } from "@/lib/skills/certificates";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";

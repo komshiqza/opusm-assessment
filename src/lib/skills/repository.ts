@@ -9,13 +9,12 @@
  * Every write first re-reads its target from FSM and passes it through the guard in
  * `src/lib/fsm/guard.ts`. If the check fails, the write request is never sent.
  */
-import { FsmTimeoutError, assertBulkOk, fileToBase64, fsmAttachmentContent, fsmCreate, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
+import { assertBulkOk, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
 import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
 import { effectiveStartDate, validateSkillName, validateValidity } from "@/lib/domain/validation";
-import { inspectCertificateFile } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import type { Assignment, AssignmentInput, Certificate, Person, ProficiencyScale, SkillDefinition } from "./types";
 import { t, tn } from "@/lib/i18n/t";
@@ -99,7 +98,7 @@ export async function loadCertificates(skillIds: string[]): Promise<Certificate[
   return out.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 }
 
-function toCertificate(a: FsmAttachment): Certificate {
+export function toCertificate(a: FsmAttachment): Certificate {
   return { id: a.id, skillId: a.object.objectId, fileName: a.fileName, type: a.type, createdAt: a.createDateTime ?? null };
 }
 
@@ -131,7 +130,7 @@ async function assertOwnTag(tagId: string): Promise<void> {
   assertOwnName(tag.name, "Tag");
 }
 
-async function assertOwnSkill(skillId: string): Promise<{ tagId: string }> {
+export async function assertOwnSkill(skillId: string): Promise<{ tagId: string }> {
   assertFsmId(skillId);
   const skills = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [{ field: "id", operator: "=", value: skillId }]);
   const skill = skills.find((s) => s.id === skillId && !s.deleted) ?? null;
@@ -139,7 +138,7 @@ async function assertOwnSkill(skillId: string): Promise<{ tagId: string }> {
   return { tagId: skill!.tagId };
 }
 
-async function assertOwnAttachment(attachmentId: string): Promise<void> {
+export async function assertOwnAttachment(attachmentId: string): Promise<void> {
   assertFsmId(attachmentId);
   const attachment = await fsmGet<FsmAttachment>("Attachment", attachmentId);
   if (!attachment || attachment.object?.objectType !== "SKILL") {
@@ -288,7 +287,7 @@ function withProgress(error: unknown, done: DeleteImpact): unknown {
  * The Skill Service requires a start date ("Start date is required"). An empty "valid from"
  * therefore means "from today". Returns the dates that are actually sent.
  */
-function toWritableDates(input: AssignmentInput): { startDate: string; endDate: string | null } {
+export function toWritableDates(input: AssignmentInput): { startDate: string; endDate: string | null } {
   const startDate = effectiveStartDate(input.startDate, todayIso());
   const error = validateValidity(startDate, input.endDate);
   if (error) throw new Error(error);
@@ -362,148 +361,10 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
   }
 }
 
-// --- Writes: certificates (Attachments) --------------------------------------------------
-
-/** Uploads one file. `uploadId` goes into the description, so a check after a timeout can find this upload. */
-export async function uploadCertificate(assignmentId: string, file: File, uploadId: string = newUploadId()): Promise<Certificate> {
-  const check = await inspectCertificateFile(file);
-  if (!check.ok) throw new Error(check.error);
-  await assertOwnSkill(assignmentId);
-  const created = await fsmCreate<FsmAttachment>("Attachment", {
-    fileName: file.name,
-    title: file.name,
-    description: uploadDescription(uploadId),
-    type: check.type,
-    fileContent: await fileToBase64(file),
-    object: { objectId: assignmentId, objectType: "SKILL" },
-  });
-  return toCertificate({ ...created, object: created.object ?? { objectId: assignmentId, objectType: "SKILL" } });
-}
-
-export interface UploadOutcome {
-  /** Certificates now in FSM, including ones confirmed after FSM answered too late. */
-  uploaded: Certificate[];
-  /** Files FSM answered too late for, but the check found them in FSM ("Uploaded ✓"). */
-  confirmedLate: File[];
-  /**
-   * Files that are not in FSM, with the reason for the user; the user may try again.
-   * `uploadId`: the upload timed out; a retry first looks for this id, so a file that arrived late
-   * is not uploaded twice.
-   */
-  failed: { file: File; error: string; uploadId?: string }[];
-  /** FSM answered too late and the check could not decide ("Not confirmed yet"): never retried, only checked again. */
-  unconfirmed: { file: File; error: string; uploadId: string }[];
-}
-
-/** A file to upload; after a timed-out upload, with that upload's id. */
-export type UploadItem = File | { file: File; uploadId: string };
-
-/** The "not uploaded" files as retry items: a timed-out one keeps its upload id, so the retry checks first. */
-export function retryItems(failed: UploadOutcome["failed"]): UploadItem[] {
-  return failed.map((f) => (f.uploadId === undefined ? f.file : { file: f.file, uploadId: f.uploadId }));
-}
+// --- Checks after a write FSM did not answer -------------------------------------------
 
 /** What one look into FSM after a timed-out write found. Reads only. */
 export type WriteCheck<T> = { result: "done"; value: T } | { result: "notDone" } | { result: "unconfirmed"; error: string };
-
-/**
- * Every upload gets its own id in the attachment's description, so a check after a timeout finds
- * exactly this upload: another file with the same name can never be taken for it. (Measured: the
- * Query API finds an attachment by its description right after the upload.)
- */
-const UPLOAD_ID = /^[0-9a-f]{32}$/;
-const uploadDescription = (uploadId: string) => `Skill Management upload ${uploadId}`;
-const newUploadId = () => crypto.randomUUID().replaceAll("-", "");
-
-const sha256 = async (data: ArrayBuffer) => new Uint8Array(await crypto.subtle.digest("SHA-256", data)).join(",");
-
-/** The stored content is exactly the file: same size first, then the same SHA-256 (measured: FSM returns the bytes unchanged). */
-async function sameBytes(attachmentId: string, file: File): Promise<boolean> {
-  const stored = await fsmAttachmentContent(attachmentId);
-  if (stored.size !== file.size) return false;
-  const [a, b] = await Promise.all([stored.arrayBuffer(), file.arrayBuffer()]);
-  return (await sha256(a)) === (await sha256(b));
-}
-
-/**
- * Did the upload with this id arrive? Reads only. The attachment must carry this upload's id, which
- * is new for every upload, so a file that was there before (even the same file, uploaded on purpose
- * earlier) never counts. Its content must also be byte for byte the file: otherwise, or when the
- * content cannot be read, the answer is "not confirmed", never a guess.
- */
-export async function checkCertificateUploaded(assignmentId: string, uploadId: string, file: File): Promise<WriteCheck<Certificate>> {
-  try {
-    assertFsmId(assignmentId);
-    if (!UPLOAD_ID.test(uploadId)) throw new Error("Invalid upload id.");
-    const rows = await fsmQuery<{ a: FsmAttachment }>(
-      `SELECT a.id, a.fileName, a.type, a.createDateTime, a.object FROM Attachment a WHERE a.object.objectType = 'SKILL' AND a.object.objectId = '${assignmentId}' AND a.description = '${uploadDescription(uploadId)}'`,
-      ["Attachment"],
-    );
-    if (rows.length === 0) return { result: "notDone" };
-    if (rows.length > 1) return { result: "unconfirmed", error: t("upload.moreThanOne") };
-    assertFsmId(rows[0].a.id);
-    if (!(await sameBytes(rows[0].a.id, file))) {
-      return { result: "unconfirmed", error: t("upload.contentDiffers") };
-    }
-    return { result: "done", value: toCertificate(rows[0].a) };
-  } catch (e) {
-    return { result: "unconfirmed", error: toUserMessage(e) };
-  }
-}
-
-const NOT_UPLOADED = () => t("upload.notInFsm");
-
-/** Sorts one check result into the outcome lists. */
-function recordCheck(outcome: UploadOutcome, file: File, uploadId: string, check: WriteCheck<Certificate>): void {
-  if (check.result === "done") {
-    outcome.uploaded.push(check.value);
-    outcome.confirmedLate.push(file);
-  } else if (check.result === "notDone") {
-    outcome.failed.push({ file, error: NOT_UPLOADED(), uploadId });
-  } else {
-    outcome.unconfirmed.push({ file, error: check.error, uploadId });
-  }
-}
-
-/**
- * Uploads files one after another to one assignment. A failed file does not stop the others; it is
- * returned with FSM's message so the user can retry exactly those files. A file FSM does not answer
- * for is looked up in FSM right away (read only) and never sent again by the app itself.
- */
-export async function uploadCertificates(
-  assignmentId: string,
-  items: UploadItem[],
-  onProgress?: (file: File, index: number, total: number) => void,
-): Promise<UploadOutcome> {
-  const outcome: UploadOutcome = { uploaded: [], confirmedLate: [], failed: [], unconfirmed: [] };
-  for (const [index, item] of items.entries()) {
-    const file = item instanceof File ? item : item.file;
-    onProgress?.(file, index, items.length);
-    if (!(item instanceof File)) {
-      // A retry after a timeout: first make sure the earlier upload did not arrive late.
-      const check = await checkCertificateUploaded(assignmentId, item.uploadId, file);
-      if (check.result !== "notDone") {
-        recordCheck(outcome, file, item.uploadId, check);
-        continue;
-      }
-    }
-    const uploadId = newUploadId();
-    try {
-      outcome.uploaded.push(await uploadCertificate(assignmentId, file, uploadId));
-    } catch (e) {
-      if (e instanceof FsmTimeoutError && e.write) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId, file));
-      else outcome.failed.push({ file, error: toUserMessage(e) });
-    }
-  }
-  return outcome;
-}
-
-/** "Check again" for uploads that could not be confirmed. Reads only; uploads nothing. */
-export async function recheckUploads(assignmentId: string, unconfirmed: UploadOutcome["unconfirmed"]): Promise<UploadOutcome> {
-  const outcome: UploadOutcome = { uploaded: [], confirmedLate: [], failed: [], unconfirmed: [] };
-  for (const { file, uploadId } of unconfirmed) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId, file));
-  return outcome;
-}
 
 /**
  * Did a timed-out create arrive? Looks for this person's assignment of this skill (Skill Service,
@@ -527,103 +388,3 @@ export async function checkAssignmentCreated(tagId: string, personId: string): P
   }
 }
 
-/**
- * Assign a skill and upload its certificates in one step for the user. FSM needs the assignment
- * first, because an attachment is linked to a skill id. If creating the assignment fails, nothing
- * is uploaded; if an upload fails, the assignment stays and the failed files are returned.
- */
-export async function createAssignmentWithCertificates(
-  tagId: string,
-  personId: string,
-  input: AssignmentInput,
-  files: File[],
-  onProgress?: (file: File, index: number, total: number) => void,
-): Promise<{ assignment: Assignment } & UploadOutcome> {
-  const assignment = await createAssignment(tagId, personId, input);
-  return { assignment, ...(await uploadCertificates(assignment.id, files, onProgress)) };
-}
-
-const CERTIFICATE_MIME: Record<string, string> = { PDF: "application/pdf", JPEG: "image/jpeg", PNG: "image/png" };
-
-/** The certificate file with the right content type, so the browser can show it (read only). */
-export async function loadCertificateFile(certificate: Certificate): Promise<Blob> {
-  assertFsmId(certificate.id);
-  const blob = await fsmAttachmentContent(certificate.id);
-  return new Blob([blob], { type: CERTIFICATE_MIME[certificate.type] ?? "application/octet-stream" });
-}
-
-export async function deleteCertificate(attachmentId: string): Promise<void> {
-  await assertOwnAttachment(attachmentId);
-  await fsmDelete("Attachment", attachmentId);
-}
-
-// --- Bulk: one skill to several persons --------------------------------------------------
-
-/** Shared company: no bulk imports beyond a few dozen records, so one action is capped. */
-export const BULK_LIMIT = 25;
-
-/** What happened for one person. `checkFirst`: a create FSM did not answer; a retry looks in FSM before creating. */
-export interface BulkResult {
-  personId: string;
-  result: "assigned" | "skipped" | "failed" | "unconfirmed";
-  error?: string;
-  checkFirst?: boolean;
-}
-
-/** The answer of a check after a timed-out create, as a bulk result. */
-function fromCheck(personId: string, check: WriteCheck<Assignment>): BulkResult {
-  if (check.result === "done") return { personId, result: "assigned" };
-  if (check.result === "notDone") return { personId, result: "failed", error: t("assign.notInFsm"), checkFirst: true };
-  return { personId, result: "unconfirmed", error: check.error };
-}
-
-/** One person: the same guarded create as a single assignment, with the same timeout check. */
-async function assignOne(tagId: string, personId: string, input: AssignmentInput, checkFirst: boolean): Promise<BulkResult> {
-  if (checkFirst) {
-    const check = await checkAssignmentCreated(tagId, personId);
-    if (check.result !== "notDone") return fromCheck(personId, check);
-  }
-  try {
-    await createAssignment(tagId, personId, input);
-    return { personId, result: "assigned" };
-  } catch (e) {
-    if (e instanceof AssignmentExistsError) return { personId, result: "skipped" };
-    if (e instanceof FsmTimeoutError && e.write) return fromCheck(personId, await checkAssignmentCreated(tagId, personId));
-    return { personId, result: "failed", error: toUserMessage(e) };
-  }
-}
-
-/**
- * Assigns one skill to several persons, one after another: each create goes through the same guards
- * and duplicate check as a single assignment, and a person who already has the skill is skipped.
- * Returns one result per person; a failure does not stop the others. No certificates in bulk.
- */
-export async function bulkAssign(
-  tagId: string,
-  personIds: string[],
-  input: AssignmentInput,
-  onProgress?: (index: number, total: number) => void,
-): Promise<BulkResult[]> {
-  if (personIds.length > BULK_LIMIT) throw new Error(t("bulk.limit", { max: BULK_LIMIT }));
-  toWritableDates(input); // invalid dates: stop before the first write
-  const results: BulkResult[] = [];
-  for (const [index, personId] of personIds.entries()) {
-    onProgress?.(index, personIds.length);
-    results.push(await assignOne(tagId, personId, input, false));
-  }
-  return results;
-}
-
-/** Try again for the failed persons only; a timed-out one is looked up in FSM first, never created twice. */
-export async function retryBulk(tagId: string, failed: BulkResult[], input: AssignmentInput): Promise<BulkResult[]> {
-  const results: BulkResult[] = [];
-  for (const r of failed) results.push(await assignOne(tagId, r.personId, input, r.checkFirst ?? false));
-  return results;
-}
-
-/** Check again for persons whose timed-out create could not be confirmed. Reads only. */
-export async function recheckBulk(tagId: string, unconfirmed: BulkResult[]): Promise<BulkResult[]> {
-  const results: BulkResult[] = [];
-  for (const r of unconfirmed) results.push(fromCheck(r.personId, await checkAssignmentCreated(tagId, r.personId)));
-  return results;
-}

@@ -6,15 +6,8 @@ import { getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { effectiveStartDate, validityProblem } from "@/lib/domain/validation";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
-import {
-  checkAssignmentCreated,
-  createAssignmentWithCertificates,
-  deleteAssignment,
-  recheckUploads,
-  retryItems,
-  updateAssignment,
-  uploadCertificates,
-} from "@/lib/skills/repository";
+import { checkAssignmentCreated, deleteAssignment, updateAssignment } from "@/lib/skills/repository";
+import { createAssignmentWithCertificates, recheckUploads, retryItems, uploadCertificates } from "@/lib/skills/certificates";
 import { toUserMessage } from "@/lib/errors";
 import { FsmTimeoutError } from "@/lib/fsm/client";
 import { formatDate, formatFileSize, formatPersonType } from "@/lib/format";

@@ -1,4 +1,4 @@
-import { loadCertificateFile } from "@/lib/skills/repository";
+import { loadCertificateFile } from "@/lib/skills/certificates";
 import type { Certificate } from "@/lib/skills/types";
 
 /** Loads the file through the repository (FSM errors keep their message) and saves it under its own name. */

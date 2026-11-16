@@ -1,4 +1,4 @@
-import type { UploadOutcome } from "@/lib/skills/repository";
+import type { UploadOutcome } from "@/lib/skills/certificates";
 import { t } from "@/lib/i18n/t";
 
 /** Upload results a dialog shows until the user dismisses them. */
