@@ -22,6 +22,7 @@ import { useToday } from "@/hooks/useToday";
 import { formatPersonType } from "@/lib/format";
 import { personsWithoutJobTitle, recordsNeedingType, secondaryRecordIds, selectPersonRows } from "@/lib/domain/persons";
 import { knownSkillIds } from "@/lib/domain/skillFilter";
+import { NO_JOB_TITLE, jobTitleOptions, knownJobTitles } from "@/lib/domain/jobTitleFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
@@ -29,6 +30,7 @@ import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, cellAction, compactStatusText, emptyCellLabel, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
+import { filterMatrixRows } from "./matrixRows";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
 import styles from "./SkillMatrix.module.css";
@@ -51,6 +53,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const { data, assignmentByCell, certificatesBySkill } = state;
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
+  const [jobTitles, setJobTitles] = usePageState<string[]>("matrix.jobTitles", []);
   const [statusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
   const [showAllRecords, setShowAllRecords] = usePageState("matrix.showAllRecords", false);
   const today = useToday();
@@ -69,6 +72,13 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     if (data && filterIds !== skillIds) setSkillIds(filterIds);
   }, [data, filterIds, skillIds, setSkillIds]);
 
+  /** Job titles of all loaded persons (the same values in both views); a title nobody has any more is dropped. */
+  const titleOptions = useMemo(() => jobTitleOptions(data?.persons ?? []), [data]);
+  const titleFilter = knownJobTitles(jobTitles, titleOptions);
+  useEffect(() => {
+    if (data && titleFilter !== jobTitles) setJobTitles(titleFilter);
+  }, [data, titleFilter, jobTitles, setJobTitles]);
+
   const statusOf = (personId: string, tagId: string) => getAssignmentStatus(assignmentByCell.get(cellKey(personId, tagId)), today);
 
   const query = personQuery.trim().toLowerCase();
@@ -81,11 +91,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const secondary = useMemo(() => secondaryRecordIds(data?.persons ?? []), [data]);
   const technicianCount = technicianRows.filter((p) => !withoutJobTitle.has(p.id)).length;
   const extraCount = technicianRows.length - technicianCount;
-  const visiblePersons = rows.filter((p) => {
-    if (query && !`${p.name} ${p.jobTitle ?? ""}`.toLowerCase().includes(query)) return false;
-    if (statusFilter === "all") return true;
-    return visibleSkills.some((d) => statusOf(p.id, d.id) === statusFilter);
-  });
+  /** The rows shown; the CSV export and Bulk assign take exactly these. */
+  const visiblePersons = filterMatrixRows(rows, { query, jobTitles: titleFilter, statusFilter, skills: visibleSkills, statusOf });
 
   /** "ERP user" etc. only with "All person records", or where two records of one person are listed. */
   const needsType = recordsNeedingType(visiblePersons);
@@ -118,7 +125,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     );
   }
 
-  const filtersActive = Boolean(query || filterIds.length || statusFilter !== "all");
+  const filtersActive = Boolean(query || titleFilter.length || filterIds.length || statusFilter !== "all");
 
   /** Everything one cell (or one line of a phone card) shows. */
   const cellInfo = (p: Person, d: SkillDefinition) => {
@@ -185,6 +192,23 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           />
         </div>
         <div className={styles.field}>
+          <Label for="matrix-job-title-filter">{t("matrix.jobTitles")}</Label>
+          <MultiComboBox
+            id="matrix-job-title-filter"
+            placeholder={t("matrix.allJobTitles")}
+            onSelectionChange={(e) => setJobTitles(e.detail.items.map((i) => String(i.dataset.id)))}
+          >
+            {titleOptions.map((title) => (
+              <MultiComboBoxItem
+                key={title}
+                data-id={title}
+                text={title === NO_JOB_TITLE ? t("matrix.noJobTitle") : title}
+                selected={titleFilter.includes(title)}
+              />
+            ))}
+          </MultiComboBox>
+        </div>
+        <div className={styles.field}>
           <Label for="matrix-skill-filter">{t("matrix.skills")}</Label>
           <MultiComboBox
             id="matrix-skill-filter"
@@ -213,6 +237,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             className={styles.reset}
             onClick={() => {
               setPersonQuery("");
+              setJobTitles([]);
               setSkillIds([]);
               setStatusFilter("all");
             }}

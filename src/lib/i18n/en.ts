@@ -82,6 +82,9 @@ export const en = {
 
   // Matrix
   "matrix.personFilter": "Name or job title",
+  "matrix.jobTitles": "Job title",
+  "matrix.allJobTitles": "All job titles",
+  "matrix.noJobTitle": "No job title",
   "matrix.skills": "Skills",
   "matrix.allSkills": "All skills",
   "matrix.statusAll": "All persons",

@@ -81,6 +81,9 @@ export const de: Record<MessageKey, string> = {
 
   // Matrix
   "matrix.personFilter": "Name oder Funktion",
+  "matrix.jobTitles": "Funktion",
+  "matrix.allJobTitles": "Alle Funktionen",
+  "matrix.noJobTitle": "Ohne Funktion",
   "matrix.skills": "Qualifikationen",
   "matrix.allSkills": "Alle Qualifikationen",
   "matrix.statusAll": "Alle Personen",
