@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OwnershipError } from "@/lib/fsm/guard";
 import {
   createAssignment,
+  loadCertificateFile,
   deleteAssignment,
   deleteCertificate,
   deleteSkillDefinition,
@@ -67,6 +68,11 @@ beforeEach(() => {
       return json({ data: rows, lastPage: 1 });
     }
     if (path.endsWith("/search")) return json({ content: searchAnswer(path, body.filter ?? []), last: true, totalElements: 0 });
+    if (path.endsWith("/content") && method === "GET") {
+      return attachmentAnswer
+        ? new Response("%PDF-1.4 dummy", { status: 200, headers: { "content-type": "application/pdf;charset=ISO-8859-1" } })
+        : json({ error: "CA-20", message: "CA-20: Object Attachment with id CCCC… not found" }, 404);
+    }
     if (path.startsWith("data/v4/Attachment/") && method === "GET") {
       return attachmentAnswer ? json({ data: [{ attachment: attachmentAnswer }] }) : json({ error: "not found" }, 404);
     }
@@ -232,5 +238,21 @@ describe("own data", () => {
   it("rejects invalid dates before asking FSM anything", async () => {
     await expect(createAssignment(OWN_TAG, PERSON, { startDate: "2027-01-02", endDate: "2027-01-01", proficiencyId: null })).rejects.toThrow(/before/);
     expect(calls).toEqual([]);
+  });
+});
+
+describe("certificate files", () => {
+  const cert = { id: ATTACHMENT, skillId: SKILL, fileName: "a.png", type: "PNG", createdAt: null };
+
+  it("returns the file with the content type of its certificate type", async () => {
+    attachmentAnswer = { id: ATTACHMENT };
+    const blob = await loadCertificateFile(cert);
+    expect(blob.type).toBe("image/png");
+    expect(await blob.text()).toBe("%PDF-1.4 dummy");
+  });
+
+  it("passes FSM's own error message on, not only the HTTP status", async () => {
+    attachmentAnswer = null;
+    await expect(loadCertificateFile(cert)).rejects.toThrow(/CA-20: Object Attachment with id .* not found/);
   });
 });

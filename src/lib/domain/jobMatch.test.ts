@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkSkillForJob, isValidOn, matchTechnicians } from "./jobMatch";
+import { checkSkillForJob, matchTechnicians } from "./jobMatch";
+import { isValidOn } from "./status";
 
 const JOB = "2026-12-15";
 const TODAY = "2026-11-16";

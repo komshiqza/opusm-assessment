@@ -16,18 +16,13 @@ import {
   TableRow,
   Text,
 } from "@ui5/webcomponents-react";
-import { addDays, getAssignmentStatus, todayIso } from "@/lib/domain/status";
+import { addDays, daysBetween, getAssignmentStatus, todayIso } from "@/lib/domain/status";
 import { formatDate, formatPersonType } from "@/lib/format";
 import type { SkillDataState } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "@/components/matrix/statusDisplay";
 
 const WINDOWS = [30, 60, 90, 180, 365];
-
-/** Days between two "YYYY-MM-DD" dates (b - a). */
-function daysBetween(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
-}
 
 interface ExpiryOverviewProps {
   state: SkillDataState;

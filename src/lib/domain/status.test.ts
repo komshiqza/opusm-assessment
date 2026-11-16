@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, getAssignmentStatus, normalizeEndDate } from "./status";
+import { addDays, daysBetween, getAssignmentStatus, normalizeEndDate } from "./status";
 
 const TODAY = "2026-11-16";
 
@@ -22,6 +22,18 @@ describe("getAssignmentStatus", () => {
     expect(getAssignmentStatus(null, TODAY)).toBe("none");
   });
 
+  it.each([
+    // [startDate, endDate, expected, why]
+    ["2026-11-15", null, "valid", "started yesterday"],
+    ["2026-11-16", null, "valid", "starts today"],
+    ["2027-01-01", null, "upcoming", "starts later, no end date"],
+    ["2026-11-20", "2026-12-01", "upcoming", "starts later, ends within 30 days: not valid yet comes first"],
+    ["2027-01-01", "2028-01-01", "upcoming", "starts later, ends much later"],
+    [null, "2026-12-01", "expiring", "no start date"],
+  ] as const)("startDate %s, endDate %s → %s (%s)", (startDate, endDate, expected, _why) => {
+    expect(getAssignmentStatus({ startDate, endDate }, TODAY)).toBe(expected);
+  });
+
   it("works across a year boundary", () => {
     expect(getAssignmentStatus({ endDate: "2027-01-10" }, "2026-12-20")).toBe("expiring");
     // 20 Dec + 30 days = 19 Jan
@@ -38,6 +50,14 @@ describe("normalizeEndDate", () => {
     expect(normalizeEndDate("2027-03-01")).toBe("2027-03-01");
     expect(normalizeEndDate(null)).toBeNull();
     expect(normalizeEndDate("")).toBeNull();
+  });
+});
+
+describe("daysBetween", () => {
+  it("counts calendar days, negative when the second date is earlier", () => {
+    expect(daysBetween("2026-12-09", "2026-12-15")).toBe(6);
+    expect(daysBetween("2026-12-15", "2026-12-09")).toBe(-6);
+    expect(daysBetween("2026-03-28", "2026-03-30")).toBe(2); // across the DST change
   });
 });
 

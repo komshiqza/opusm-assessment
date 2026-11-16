@@ -56,7 +56,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   });
 
   /** Counts over all rows and the visible skills (independent of the person and status filter). */
-  const counts = { valid: 0, expiring: 0, expired: 0 };
+  const counts = { upcoming: 0, valid: 0, expiring: 0, expired: 0 };
   for (const p of rows) {
     for (const d of visibleSkills) {
       const s = statusOf(p.id, d.id);
@@ -111,6 +111,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             <Option value="expiring">With a skill expiring soon</Option>
             <Option value="expired">With an expired skill</Option>
             <Option value="valid">With a valid skill</Option>
+            <Option value="upcoming">With a skill that starts later</Option>
             <Option value="none">With a missing skill</Option>
           </Select>
         </div>
@@ -140,20 +141,22 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
         <Text>
           {visiblePersons.length} of {rows.length} {showAllRecords ? "person records" : "technicians"} · {visibleSkills.length} skills
         </Text>
-        {(["expiring", "expired", "valid"] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            className={styles.summaryChip}
-            style={{ color: STATUS_DISPLAY[s].color }}
-            aria-pressed={statusFilter === s}
-            onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-            title={`Show persons with status “${STATUS_DISPLAY[s].label}”`}
-          >
-            <Icon name={STATUS_DISPLAY[s].icon} className={styles.chipIcon} style={{ color: "inherit" }} />
-            {counts[s]} {STATUS_DISPLAY[s].label.toLowerCase()}
-          </button>
-        ))}
+        {(["expiring", "expired", "valid", "upcoming"] as const)
+          .filter((s) => s !== "upcoming" || counts.upcoming > 0)
+          .map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={styles.summaryChip}
+              style={{ color: STATUS_DISPLAY[s].color }}
+              aria-pressed={statusFilter === s}
+              onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+              title={`Show persons with status “${STATUS_DISPLAY[s].label}”`}
+            >
+              <Icon name={STATUS_DISPLAY[s].icon} className={styles.chipIcon} style={{ color: "inherit" }} />
+              {counts[s]} {STATUS_DISPLAY[s].label.toLowerCase()}
+            </button>
+          ))}
         <span className={styles.legend}>
           <Icon name="attachment" className={styles.chipIcon} /> = certificate attached · click a cell to assign or edit
         </span>
@@ -188,7 +191,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
                     const status = getAssignmentStatus(assignment, today);
                     const certCount = assignment ? (certificatesBySkill.get(assignment.id)?.length ?? 0) : 0;
                     const display = STATUS_DISPLAY[status];
-                    const text = statusText(status, assignment?.endDate ?? null);
+                    const text = statusText(status, assignment);
                     const label = assignment
                       ? `${p.name}, ${d.name}: ${text}${assignment.proficiencyName ? `, level ${assignment.proficiencyName}` : ""}, ${certCount ? `${certCount} certificate(s)` : "no certificate"}. Edit.`
                       : `${p.name}, ${d.name}: not assigned. Assign.`;

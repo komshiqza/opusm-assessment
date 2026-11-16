@@ -3,28 +3,14 @@
  * A skill counts for a job when it is valid on the job date (and, if asked, has at least the
  * required level). All dates are "YYYY-MM-DD" strings, compared as text.
  */
-import { normalizeEndDate } from "./status";
+import { daysBetween, normalizeEndDate } from "./status";
 import { formatDate } from "@/lib/format";
 
-interface Validity {
+interface HeldSkill {
   startDate: string | null;
   endDate: string | null;
-}
-
-interface HeldSkill extends Validity {
   proficiencyLevel: number | null;
   proficiencyName: string | null;
-}
-
-/** Valid on `date`: started on or before it, and the end date (last valid day) is on or after it. */
-export function isValidOn(skill: Validity, date: string): boolean {
-  if (skill.startDate && skill.startDate > date) return false;
-  const end = normalizeEndDate(skill.endDate);
-  return !end || end >= date;
-}
-
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
 export interface SkillCheck {

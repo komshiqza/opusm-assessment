@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Bar, BusyIndicator, Button, Dialog, MessageStrip } from "@ui5/webcomponents-react";
-import { attachmentContentUrl } from "@/lib/fsm/client";
+import { loadCertificateFile } from "@/lib/skills/repository";
+import { toUserMessage } from "@/lib/errors";
 import type { Certificate } from "@/lib/skills/types";
+import { saveCertificate } from "./saveCertificate";
 import styles from "./AssignmentDialog.module.css";
-
-const MIME_TYPE: Record<string, string> = { PDF: "application/pdf", JPEG: "image/jpeg", PNG: "image/png" };
 
 type Preview = { url: string } | { error: string } | null;
 
@@ -20,19 +20,17 @@ export function CertificatePreview({ certificate, onClose }: { certificate: Cert
   useEffect(() => {
     let url: string | null = null;
     let cancelled = false;
-    fetch(attachmentContentUrl(certificate.id))
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`FSM answered with HTTP ${res.status}.`);
-        const blob = new Blob([await res.arrayBuffer()], { type: MIME_TYPE[certificate.type] ?? "application/octet-stream" });
+    loadCertificateFile(certificate)
+      .then((blob) => {
         url = URL.createObjectURL(blob);
         if (!cancelled) setPreview({ url });
       })
-      .catch((e: unknown) => !cancelled && setPreview({ error: e instanceof Error ? e.message : String(e) }));
+      .catch((e: unknown) => !cancelled && setPreview({ error: toUserMessage(e) }));
     return () => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [certificate.id, certificate.type]);
+  }, [certificate]);
 
   return (
     <Dialog
@@ -45,7 +43,7 @@ export function CertificatePreview({ certificate, onClose }: { certificate: Cert
           design="Footer"
           endContent={
             <>
-              <Button icon="download" onClick={() => window.location.assign(attachmentContentUrl(certificate.id))}>
+              <Button icon="download" onClick={() => saveCertificate(certificate).catch((e: unknown) => setPreview({ error: toUserMessage(e) }))}>
                 Download
               </Button>
               <Button design="Emphasized" onClick={onClose}>
@@ -59,7 +57,7 @@ export function CertificatePreview({ certificate, onClose }: { certificate: Cert
       {!preview && <BusyIndicator active delay={0} size="L" text="Loading certificate…" className={styles.previewLoading} />}
       {preview && "error" in preview && (
         <MessageStrip design="Negative" hideCloseButton>
-          Could not load the certificate: {preview.error}
+          Could not load the certificate. {preview.error}
         </MessageStrip>
       )}
       {preview && "url" in preview &&

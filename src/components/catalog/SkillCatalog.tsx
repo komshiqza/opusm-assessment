@@ -35,7 +35,8 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
   for (const a of state.data?.assignments ?? []) {
     const u = usage.get(a.tagId) ?? { assigned: 0, attention: 0, certificates: 0 };
     u.assigned++;
-    if (getAssignmentStatus(a, today) !== "valid") u.attention++;
+    const status = getAssignmentStatus(a, today);
+    if (status === "expiring" || status === "expired") u.attention++;
     u.certificates += state.certificatesBySkill.get(a.id)?.length ?? 0;
     usage.set(a.tagId, u);
   }

@@ -3,7 +3,7 @@
  * compared as strings, so there are no time-zone shifts.
  */
 
-export type AssignmentStatus = "none" | "valid" | "expiring" | "expired";
+export type AssignmentStatus = "none" | "upcoming" | "valid" | "expiring" | "expired";
 
 /** An end date this close (in days, inclusive) counts as "expiring soon". */
 export const EXPIRY_WARNING_DAYS = 30;
@@ -25,6 +25,18 @@ export function todayIso(now: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Calendar days from `from` to `to` (negative when `to` is earlier). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+/** Valid on `date`: started on or before it, and the end date (last valid day) is on or after it. */
+export function isValidOn(skill: { startDate?: string | null; endDate: string | null }, date: string): boolean {
+  if (skill.startDate && skill.startDate > date) return false;
+  const end = normalizeEndDate(skill.endDate);
+  return !end || end >= date;
+}
+
 /** Calendar arithmetic in UTC so daylight-saving changes cannot shift the result. */
 export function addDays(isoDate: string, days: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
@@ -34,14 +46,19 @@ export function addDays(isoDate: string, days: number): string {
 /**
  * - no assignment                         → "none"
  * - end date before today                 → "expired"
+ * - start date after today                → "upcoming" (not valid yet; shown as "Starts …")
  * - end date today … today + 30 days      → "expiring" (the end date is the last valid day)
  * - no end date, or later than that       → "valid"
+ * "Valid today" is the same rule the job search uses (`isValidOn`), so both views agree.
  */
-export function getAssignmentStatus(assignment: { endDate: string | null } | null | undefined, today: string): AssignmentStatus {
+export function getAssignmentStatus(
+  assignment: { startDate?: string | null; endDate: string | null } | null | undefined,
+  today: string,
+): AssignmentStatus {
   if (!assignment) return "none";
   const end = normalizeEndDate(assignment.endDate);
-  if (!end) return "valid";
-  if (end < today) return "expired";
-  if (end <= addDays(today, EXPIRY_WARNING_DAYS)) return "expiring";
+  if (end && end < today) return "expired";
+  if (!isValidOn(assignment, today)) return "upcoming";
+  if (end && end <= addDays(today, EXPIRY_WARNING_DAYS)) return "expiring";
   return "valid";
 }

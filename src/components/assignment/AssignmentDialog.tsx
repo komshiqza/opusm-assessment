@@ -114,7 +114,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
               </Text>
               {assignment && (
                 <Text style={{ color: STATUS_DISPLAY[status].color, fontWeight: "bold" }}>
-                  {STATUS_DISPLAY[status].label}: {statusText(status, assignment.endDate)}
+                  {STATUS_DISPLAY[status].label}: {statusText(status, assignment)}
                 </Text>
               )}
             </div>

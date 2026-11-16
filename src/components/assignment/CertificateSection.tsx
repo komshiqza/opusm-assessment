@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { BusyIndicator, Button, FileUploader, Icon, Link, MessageStrip, Text, Title } from "@ui5/webcomponents-react";
-import { attachmentContentUrl } from "@/lib/fsm/client";
 import { deleteCertificate, uploadCertificate } from "@/lib/skills/repository";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, validateCertificateFile } from "@/lib/domain/validation";
 import { toUserMessage } from "@/lib/errors";
@@ -11,6 +10,7 @@ import type { Certificate } from "@/lib/skills/types";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useToast } from "@/components/common/Toast";
 import { CertificatePreview } from "./CertificatePreview";
+import { saveCertificate } from "./saveCertificate";
 import styles from "./AssignmentDialog.module.css";
 
 interface CertificateSectionProps {
@@ -88,7 +88,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onBu
                 icon="download"
                 tooltip={`Download ${c.fileName}`}
                 accessibleName={`Download ${c.fileName}`}
-                onClick={() => window.location.assign(attachmentContentUrl(c.id))}
+                onClick={() => saveCertificate(c).catch((e: unknown) => setErrors([`${c.fileName}: ${toUserMessage(e)}`]))}
               />
               <Button
                 design="Transparent"

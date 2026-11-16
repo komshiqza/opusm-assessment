@@ -1,10 +1,11 @@
 /**
  * Which person records the matrix shows by default.
  *
- * In the demo company every technician exists twice, as an EMPLOYEE and an ERPUSER record with
- * the same name, e-mail, user name and code (e.g. TECH01). All 40 seeded demo skills point to the
- * ERPUSER records, so that is the record FSM attaches skills to. Persons without a job title
- * (OPUSm staff, "admin", an unnamed record) are not technicians.
+ * Observation in the demo company (not a documented FSM rule): every technician exists twice, as
+ * an EMPLOYEE and an ERPUSER record with the same name, e-mail, user name and code (e.g. TECH01).
+ * In this demo data all 40 seeded skills point to the ERPUSER records, so we assume that is the
+ * record the business uses for technicians. Persons without a job title (OPUSm staff, "admin",
+ * an unnamed record) are not technicians.
  * The two records are never merged: a skill belongs to one specific person id.
  */
 export const SKILL_HOLDER_TYPE = "ERPUSER";

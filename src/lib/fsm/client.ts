@@ -29,14 +29,17 @@ async function call<T>(path: string, init: RequestInit & { params?: Record<strin
   });
   const text = await res.text();
   const data = text ? safeJson(text) : null;
-  if (!res.ok) {
-    const message =
-      (data && typeof data === "object" && ("message" in data || "error" in data)
-        ? String((data as Record<string, unknown>).message ?? (data as Record<string, unknown>).error)
-        : text) || `FSM request failed (${res.status})`;
-    throw new FsmError(message, res.status, data);
-  }
+  if (!res.ok) throw toFsmError(res.status, text, data);
   return data as T;
+}
+
+/** FSM's own message from an error response (Data/Query API: `message`/`error`, proxy: `error`). */
+function toFsmError(status: number, text: string, data: unknown): FsmError {
+  const message =
+    (data && typeof data === "object" && ("message" in data || "error" in data)
+      ? String((data as Record<string, unknown>).message ?? (data as Record<string, unknown>).error)
+      : text) || `FSM request failed (${status})`;
+  return new FsmError(message, status, data);
 }
 
 function safeJson(text: string): unknown {
@@ -116,6 +119,16 @@ export async function fsmDelete(entity: DtoEntity, id: string): Promise<void> {
 /** URL that streams an attachment's binary through the proxy (usable in <a href>, <img src>, <iframe>). */
 export function attachmentContentUrl(attachmentId: string): string {
   return `${PROXY}/data/v4/Attachment/${encodeURIComponent(attachmentId)}/content`;
+}
+
+/** Downloads an attachment's binary through the proxy. Errors carry FSM's own message, like every other call. */
+export async function fsmAttachmentContent(attachmentId: string): Promise<Blob> {
+  const res = await fetch(attachmentContentUrl(attachmentId));
+  if (!res.ok) {
+    const text = await res.text();
+    throw toFsmError(res.status, text, text ? safeJson(text) : null);
+  }
+  return res.blob();
 }
 
 /** File → base64 (without the `data:...;base64,` prefix), as expected by `Attachment.fileContent`. */

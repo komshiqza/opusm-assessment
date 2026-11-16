@@ -9,7 +9,7 @@
  * Every write first re-reads its target from FSM and passes it through the guard in
  * `src/lib/fsm/guard.ts`. If the check fails, the write request is never sent.
  */
-import { assertBulkOk, fileToBase64, fsmCreate, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
+import { assertBulkOk, fileToBase64, fsmAttachmentContent, fsmCreate, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
@@ -331,6 +331,15 @@ export async function uploadCertificate(assignmentId: string, file: File): Promi
     object: { objectId: assignmentId, objectType: "SKILL" },
   });
   return toCertificate({ ...created, object: created.object ?? { objectId: assignmentId, objectType: "SKILL" } });
+}
+
+const CERTIFICATE_MIME: Record<string, string> = { PDF: "application/pdf", JPEG: "image/jpeg", PNG: "image/png" };
+
+/** The certificate file with the right content type, so the browser can show it (read only). */
+export async function loadCertificateFile(certificate: Certificate): Promise<Blob> {
+  assertFsmId(certificate.id);
+  const blob = await fsmAttachmentContent(certificate.id);
+  return new Blob([blob], { type: CERTIFICATE_MIME[certificate.type] ?? "application/octet-stream" });
 }
 
 export async function deleteCertificate(attachmentId: string): Promise<void> {

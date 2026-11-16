@@ -33,8 +33,8 @@ export function SkillManagementApp() {
         {state.error && state.data && (
           <MessageStrip design="Negative" hideCloseButton>
             Could not reload the data from FSM: {state.error}{" "}
-            <Button design="Transparent" icon="refresh" onClick={() => void state.reload()}>
-              Try again
+            <Button design="Transparent" icon="refresh" onClick={() => void state.reload()} disabled={state.refreshing}>
+              {state.refreshing ? "Loading…" : "Try again"}
             </Button>
           </MessageStrip>
         )}
@@ -45,8 +45,8 @@ export function SkillManagementApp() {
 
         {!state.loading && !state.data && (
           <IllustratedMessage name="UnableToLoad" titleText="Could not load data from FSM" subtitleText={state.error ?? "Unknown error"}>
-            <Button design="Emphasized" icon="refresh" onClick={() => void state.reload()}>
-              Try again
+            <Button design="Emphasized" icon="refresh" onClick={() => void state.reload()} disabled={state.refreshing}>
+              {state.refreshing ? "Loading…" : "Try again"}
             </Button>
           </IllustratedMessage>
         )}

@@ -62,14 +62,16 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
     const check = checkSkillForJob(held, skill, jobDate, today, minLevel);
     const certs = held ? (state.certificatesBySkill.get(held.id)?.length ?? 0) : 0;
     const end = normalizeEndDate(held?.endDate);
-    const display = !held
-      ? STATUS_DISPLAY.none
+    const startsLater = Boolean(held?.startDate && held.startDate > jobDate);
+    const [display, label] = !held
+      ? [STATUS_DISPLAY.none, "Not assigned"]
       : check.ok
-        ? STATUS_DISPLAY.valid
-        : end && end < today
-          ? STATUS_DISPLAY.expired
-          : STATUS_DISPLAY.expiring;
-    const label = !held ? "Not assigned" : check.ok ? "Valid on job day" : end && end < jobDate ? `Ends ${formatDate(end)}` : "Does not count";
+        ? [STATUS_DISPLAY.valid, "Valid on job day"]
+        : end && end < jobDate
+          ? [end < today ? STATUS_DISPLAY.expired : STATUS_DISPLAY.expiring, `Ends ${formatDate(end)}`]
+          : startsLater
+            ? [STATUS_DISPLAY.upcoming, `Starts ${formatDate(held.startDate)}`]
+            : [STATUS_DISPLAY.expiring, "Level too low"];
     return (
       <button
         type="button"
