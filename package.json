@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check:fsm": "node --env-file=.env.local scripts/check-connection.mjs"
+    "check:fsm": "node --env-file=.env.local scripts/check-connection.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ui5/webcomponents": "2.27.2",
@@ -31,6 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^3.2.7"
   }
 }
