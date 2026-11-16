@@ -8,6 +8,7 @@ import {
   IllustratedMessage,
   MessageStrip,
   ShellBar,
+  ShellBarItem,
   ShellBarBranding,
   Tab,
   TabContainer,
@@ -27,6 +28,7 @@ import { CANDIDATE_ID_VALID } from "@/lib/candidate";
 import { useSkillData } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { ToastProvider } from "./common/Toast";
+import { ThemeMenu, useThemeMenu } from "./common/ThemeMenu";
 import { SkillMatrix } from "./matrix/SkillMatrix";
 import { SkillCatalog } from "./catalog/SkillCatalog";
 import { AssignmentDialog } from "./assignment/AssignmentDialog";
@@ -49,6 +51,7 @@ export function SkillManagementApp() {
   const [tab, setTab] = useState<TabKey>("matrix");
   const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition } | null>(null);
   const isPhone = useMediaQuery(PHONE_QUERY);
+  const themeMenu = useThemeMenu();
   const isNarrow = useMediaQuery(NARROW_QUERY);
   const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
@@ -99,7 +102,10 @@ export function SkillManagementApp() {
           </ShellBarBranding>
         }
         secondaryTitle="Service technicians on SAP FSM"
-      />
+      >
+        <ShellBarItem icon="palette" text="Theme" onClick={(e) => themeMenu.open(e.detail.targetRef)} />
+      </ShellBar>
+      <ThemeMenu opener={themeMenu.opener} onClose={themeMenu.close} />
       <main className={styles.main}>
         {!CANDIDATE_ID_VALID && (
           <MessageStrip design="Negative" hideCloseButton>

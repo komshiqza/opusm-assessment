@@ -5,7 +5,6 @@ import { Bar, BusyIndicator, Button, Dialog, Input, Label, MessageStrip, TextAre
 import { MAX_SKILL_NAME_LENGTH, validateSkillName } from "@/lib/domain/validation";
 import { createSkillDefinition, updateSkillDefinition } from "@/lib/skills/repository";
 import { toUserMessage } from "@/lib/errors";
-import { NAME_PREFIX } from "@/lib/candidate";
 import type { SkillDefinition } from "@/lib/skills/types";
 
 interface SkillDialogProps {
@@ -89,7 +88,6 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
               valueStateMessage={<div>{nameError}</div>}
               style={{ width: "100%" }}
             />
-            <Label style={{ fontSize: "var(--sapFontSmallSize)" }}>Stored in FSM as “{NAME_PREFIX}{name.trim() || "…"}”</Label>
           </div>
           <div style={{ display: "grid", gap: "0.25rem" }}>
             <Label for="skill-description" showColon>

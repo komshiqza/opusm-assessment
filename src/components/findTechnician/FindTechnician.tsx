@@ -141,7 +141,6 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
           <Title level="H4" id="find-title">
             Who can do the job?
           </Title>
-          <Text className={styles.muted}>Pick the skills the job needs and the day it takes place.</Text>
         </div>
         <div className={styles.form}>
           <div className={styles.field}>
@@ -222,7 +221,6 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
               <Title level="H4">
                 Almost ({result.almost.length}): one skill missing or not valid on {formatDate(jobDate)}
               </Title>
-              <Text className={styles.muted}>Useful to plan renewals before the job. Click a skill to edit it.</Text>
             </div>
             {result.almost.length > 0 ? (
               <Table overflowMode="Popin" headerRow={header("Why not")}>
