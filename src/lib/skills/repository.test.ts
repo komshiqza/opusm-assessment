@@ -200,6 +200,21 @@ describe("own data", () => {
     expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([`DELETE data/v4/Attachment/${ATTACHMENT}`, "DELETE skill/v2/skills"]);
   });
 
+  it("counts assignments FSM did delete when a bulk delete fails only for some of them", async () => {
+    const SECOND = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+    searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [SKILL, SECOND].map((id) => ({ id, tagId: OWN_TAG, tagName: "komshiqza::Welding" }));
+      return [];
+    };
+    bulkAnswer = (path) =>
+      path === "skill/v2/skills"
+        ? { hasErrors: true, results: [{ status: 200, resource: { id: SKILL } }, { status: 500, error: { detail: "Second assignment failed" } }] }
+        : null;
+
+    await expect(deleteSkillDefinition(OWN_TAG)).rejects.toThrow(/Second assignment failed.*1 assignment\b/);
+  });
+
   it("deletes an own certificate with exactly one request", async () => {
     attachmentAnswer = { id: ATTACHMENT, object: { objectId: SKILL, objectType: "SKILL" } };
     searchAnswer = skillOfTag("komshiqza::Welding");

@@ -207,8 +207,11 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             try {
               await deleteAssignment(assignment.id);
             } catch (e) {
-              await state.reload(); // part of it may be deleted already: show what FSM really has now
-              throw e;
+              // Part of it may be deleted already. Show the error in this dialog (the confirmation
+              // closes, and may even disappear if the assignment is gone), then show what FSM has now.
+              setError(toUserMessage(e));
+              await state.reload();
+              return;
             }
             await state.reload();
             toast(`${definition.name} removed from ${person.name}`);

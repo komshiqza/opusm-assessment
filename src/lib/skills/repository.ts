@@ -211,8 +211,9 @@ export async function deleteSkillDefinition(tagId: string): Promise<DeleteImpact
       done.certificates++;
     }
     if (skillIds.length) {
-      assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) }));
-      done.assignments = skillIds.length;
+      const res = await skillApi<BulkResponse>("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) });
+      done.assignments = res.results.filter((r) => r.status < 400).length; // counted before a partial failure throws
+      assertBulkOk(res);
       done.certificates += await deleteLateCertificates(skillIds);
     }
     assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
@@ -221,6 +222,9 @@ export async function deleteSkillDefinition(tagId: string): Promise<DeleteImpact
     throw withProgress(e, done);
   }
 }
+
+/** Answer of a Skill Service bulk (v2) call: HTTP 207 with one result per item. */
+type BulkResponse = Parameters<typeof assertBulkOk>[0];
 
 /**
  * A certificate uploaded (e.g. from another browser tab) after we listed the certificates but
