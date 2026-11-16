@@ -444,7 +444,7 @@ export async function checkCertificateUploaded(assignmentId: string, uploadId: s
   }
 }
 
-const NOT_UPLOADED = "FSM did not answer in time, and the file is not in FSM. Not uploaded. You can try again.";
+const NOT_UPLOADED = "FSM did not answer in time; the file is not in FSM.";
 
 /** Sorts one check result into the outcome lists. */
 function recordCheck(outcome: UploadOutcome, file: File, uploadId: string, check: WriteCheck<Certificate>): void {

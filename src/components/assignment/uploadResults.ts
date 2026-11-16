@@ -13,13 +13,49 @@ export interface UploadResults {
 export const EMPTY_RESULTS: UploadResults = { confirmedLate: [], failed: [], unconfirmed: [] };
 
 /**
- * Adds an outcome to what is shown. `rerun` says which list the outcome answers: a retry of the
- * "not uploaded" files replaces that list, a "Check again" replaces the "not confirmed" list.
+ * Adds an outcome to what is shown. `rerun`: the files a retry or "Check again" was for; their old
+ * lines are replaced by the new outcome.
  */
-export function applyOutcome(current: UploadResults, outcome: UploadOutcome, rerun: "failed" | "unconfirmed" | null): UploadResults {
+export function applyOutcome(current: UploadResults, outcome: UploadOutcome, rerun: File[] | null): UploadResults {
+  const keep = <T extends { file: File }>(list: T[]) => (rerun ? list.filter((x) => !rerun.includes(x.file)) : list);
   return {
     confirmedLate: [...current.confirmedLate, ...outcome.confirmedLate.map((f) => f.name)],
-    failed: [...(rerun === "failed" ? [] : current.failed), ...outcome.failed],
-    unconfirmed: [...(rerun === "unconfirmed" ? [] : current.unconfirmed), ...outcome.unconfirmed],
+    failed: [...keep(current.failed), ...outcome.failed],
+    unconfirmed: [...keep(current.unconfirmed), ...outcome.unconfirmed],
   };
+}
+
+/** One short message line: icon by kind, the file name, and its own button (none for "uploaded"). */
+export interface ResultLine {
+  kind: "uploaded" | "notUploaded" | "unconfirmed";
+  text: string;
+  /** technical reason, only as tooltip and for screen readers */
+  detail?: string;
+  /** the file the line's button acts on */
+  file: File | null;
+}
+
+/**
+ * The short lines Rosen asked for: "<file> uploaded.", "<file> was not uploaded." (Try again),
+ * "Couldn’t confirm <file>." (Check again). A timeout's technical reason is not in the text; a file
+ * FSM refused for a reason (e.g. too large) keeps that short reason, so the user knows what to fix.
+ */
+export function resultLines(results: UploadResults): ResultLine[] {
+  return [
+    ...results.confirmedLate.map((name): ResultLine => ({ kind: "uploaded", text: `${name} uploaded.`, file: null })),
+    ...results.failed.map(
+      (f): ResultLine =>
+        f.uploadId !== undefined
+          ? { kind: "notUploaded", text: `${f.file.name} was not uploaded.`, detail: f.error, file: f.file }
+          : { kind: "notUploaded", text: `${f.file.name} was not uploaded: ${f.error}`, file: f.file },
+    ),
+    ...results.unconfirmed.map((u): ResultLine => ({ kind: "unconfirmed", text: `Couldn’t confirm ${u.file.name}.`, detail: u.error, file: u.file })),
+  ];
+}
+
+/** The same three lines for a new assignment FSM answered too late for. */
+export function createResultLine(check: { result: "done" | "notDone" | "unconfirmed"; error?: string }): Omit<ResultLine, "file"> {
+  if (check.result === "done") return { kind: "uploaded", text: "Skill assigned." };
+  if (check.result === "notDone") return { kind: "notUploaded", text: "The skill was not assigned." };
+  return { kind: "unconfirmed", text: "Couldn’t confirm the assignment.", detail: check.error };
 }

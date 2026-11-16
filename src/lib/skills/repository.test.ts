@@ -514,7 +514,7 @@ describe("a write FSM did not answer is checked once in FSM, never repeated auto
     hangingUploads = new Set(["b.pdf"]);
     const outcome = await uploadWithTimeout([a, b]);
     expect(outcome.failed.map((f) => f.file.name)).toEqual(["b.pdf"]);
-    expect(outcome.failed[0].error).toMatch(/Not uploaded/);
+    expect(outcome.failed[0].error).toMatch(/not in FSM/);
     expect(outcome.failed[0].uploadId).toMatch(/^[0-9a-f]{32}$/);
     expect(uploads()).toEqual(["a.pdf", "b.pdf"]); // nothing repeated by itself
 

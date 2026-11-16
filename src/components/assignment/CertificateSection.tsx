@@ -48,7 +48,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
   const [inputKey, setInputKey] = useState(0);
 
   /** Runs one upload, retry or check under the dialog's lock, then shows what FSM has now. */
-  const runUpload = async (work: () => Promise<{ outcome: UploadOutcome; rerun: "failed" | "unconfirmed" | null; problems?: string[] }>) => {
+  const runUpload = async (work: () => Promise<{ outcome: UploadOutcome; rerun: File[] | null; problems?: string[] }>) => {
     // Busy from the first moment (also while the files are checked), so nothing else can start.
     if (operationRef.current) {
       setInputKey((k) => k + 1);
@@ -79,7 +79,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
 
   const showProgress = (file: File, i: number, total: number) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`);
 
-  const send = (items: UploadItem[], rerun: "failed" | null, problems: string[] = []) =>
+  const send = (items: UploadItem[], rerun: File[] | null, problems: string[] = []) =>
     uploadCertificates(assignmentId, items, showProgress).then((outcome) => ({ outcome, rerun, problems }));
 
   const upload = (files: File[]) =>
@@ -90,13 +90,13 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
     });
 
   /** Try again for files that are not in FSM; a timed-out one is checked first, never sent twice. */
-  const retry = () => runUpload(() => send(retryItems(results.failed), "failed"));
+  const retry = (file: File) => runUpload(() => send(retryItems(results.failed.filter((f) => f.file === file)), [file]));
 
   /** Check again for uploads that could not be confirmed. Reads only. */
-  const checkAgain = () =>
+  const checkAgain = (file: File) =>
     runUpload(async () => {
       setProgress("Checking in FSM…");
-      return { outcome: await recheckUploads(assignmentId, results.unconfirmed), rerun: "unconfirmed" };
+      return { outcome: await recheckUploads(assignmentId, results.unconfirmed.filter((u) => u.file === file)), rerun: [file] };
     });
 
   return (
@@ -158,7 +158,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
         <Text className={styles.muted}>{progress ?? `PDF, JPG or PNG, max. ${MAX_CERTIFICATE_LABEL} each`}</Text>
       </div>
 
-      <UploadResultNotes results={results} onChange={setResults} onRetry={retry} onCheckAgain={checkAgain} locked={locked || progress !== null} />
+      <UploadResultNotes results={results} onRetry={retry} onCheckAgain={checkAgain} locked={locked || progress !== null} />
       {errors.length > 0 && (
         <MessageStrip design="Negative" onClose={() => setErrors([])}>
           {errors.length === 1 ? (
