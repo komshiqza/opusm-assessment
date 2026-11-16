@@ -52,6 +52,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const [pickerKey, setPickerKey] = useState(0);
   /** Files FSM did not accept during save or retry; they stay listed until uploaded or dismissed. */
   const [failed, setFailed] = useState<UploadOutcome["failed"]>([]);
+  /** Id of the assignment this dialog just created; retry must not depend on a successful reload. */
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const assignmentId = assignment?.id ?? createdId;
   /** Certificate uploads running: the assignment must not be removed or the dialog closed meanwhile. */
   const [uploading, setUploading] = useState(false);
   const locked = busy || uploading;
@@ -95,6 +98,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       }
       setProgress("Assigning…");
       const result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress);
+      setCreatedId(result.assignment.id);
       setPendingFiles([]);
       setProgress("Refreshing…");
       await state.reload();
@@ -110,9 +114,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
   const retryFailed = () =>
     runLocked(async () => {
-      if (!assignment) return;
+      if (!assignmentId) return;
       const outcome = await uploadCertificates(
-        assignment.id,
+        assignmentId,
         failed.map((f) => f.file),
         showProgress,
       );
@@ -125,7 +129,8 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const pickFiles = (files: File[]) => {
     const { valid, problems } = splitCertificateFiles(files);
     setPickProblems(problems);
-    setPendingFiles((current) => [...current, ...valid.filter((f) => !current.some((c) => c.name === f.name && c.size === f.size))]);
+    // No automatic de-duplication: two different files can share name and size. Every picked file is listed and can be removed.
+    setPendingFiles((current) => [...current, ...valid]);
     setPickerKey((k) => k + 1);
   };
 
@@ -253,8 +258,8 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                 {certificates.length ? ` and ${certificates.length} certificate${certificates.length > 1 ? "s are" : " is"} uploaded` : ""}.{" "}
                 {failed.length === 1 ? "This file was not uploaded:" : `These ${failed.length} files were not uploaded:`}
                 <ul className={styles.errorList}>
-                  {failed.map((f) => (
-                    <li key={`${f.file.name}-${f.file.size}`}>
+                  {failed.map((f, i) => (
+                    <li key={i}>
                       {f.file.name}: {f.error}
                     </li>
                   ))}
@@ -272,8 +277,8 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                 <Label id="new-certificates-title">Certificates (optional)</Label>
                 {pendingFiles.length > 0 && (
                   <ul className={styles.certList}>
-                    {pendingFiles.map((f) => (
-                      <li key={`${f.name}-${f.size}`} className={styles.certItem}>
+                    {pendingFiles.map((f, i) => (
+                      <li key={i} className={styles.certItem}>
                         <span className={styles.certText}>
                           <span>{f.name}</span>
                           <span className={styles.muted}>{formatFileSize(f.size)} · uploaded when you assign</span>
