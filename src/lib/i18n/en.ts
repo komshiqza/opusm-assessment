@@ -125,6 +125,7 @@ export const en = {
   "matrix.cellCertificates_other": "{n} certificates",
   "matrix.cellNoCertificate": "no certificate",
   "matrix.cellNotAssigned": "{person}, {skill}: not assigned. Assign.",
+  "matrix.cellNotAssignedHere": "{person}, {skill}: not assigned.",
 
   // CSV
   "csv.record": "Record",

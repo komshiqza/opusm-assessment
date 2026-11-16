@@ -48,6 +48,11 @@ export function cellAction(assigned: boolean, secondaryRecord: boolean): "open" 
   return secondaryRecord ? "assignOnMain" : "assign";
 }
 
+/** What a screen reader hears on an empty cell: "Assign." only where a skill can be assigned. */
+export function emptyCellLabel(person: string, skill: string, action: "assign" | "assignOnMain"): string {
+  return t(action === "assign" ? "matrix.cellNotAssigned" : "matrix.cellNotAssignedHere", { person, skill });
+}
+
 /** "2027-09-12" → "12.09.27": the date in a narrow matrix cell. */
 function shortDate(iso: string | null | undefined): string {
   return formatDate(iso).replace(/\.\d{2}(\d{2})$/, ".$1");

@@ -27,7 +27,7 @@ import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
-import { STATUS_DISPLAY, cellAction, compactStatusText, statusText } from "./statusDisplay";
+import { STATUS_DISPLAY, cellAction, compactStatusText, emptyCellLabel, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
@@ -127,6 +127,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     const certCount = assignment ? (certificatesBySkill.get(assignment.id)?.length ?? 0) : 0;
     const text = statusText(status, assignment);
     const shortText = compactStatusText(status, assignment);
+    const action = cellAction(Boolean(assignment), secondary.has(p.id));
     const label = assignment
       ? t("matrix.cellLabel", {
           person: p.name,
@@ -135,8 +136,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           level: assignment.proficiencyName ? t("matrix.cellLevel", { level: assignment.proficiencyName }) : "",
           certificates: certCount ? tn("matrix.cellCertificates", certCount) : t("matrix.cellNoCertificate"),
         })
-      : t("matrix.cellNotAssigned", { person: p.name, skill: d.name });
-    const action = cellAction(Boolean(assignment), secondary.has(p.id));
+      : emptyCellLabel(p.name, d.name, action === "assignOnMain" ? "assignOnMain" : "assign");
     return { assignment, action, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
   };
 

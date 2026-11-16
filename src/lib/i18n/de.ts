@@ -124,6 +124,7 @@ export const de: Record<MessageKey, string> = {
   "matrix.cellCertificates_other": "{n} Zertifikate",
   "matrix.cellNoCertificate": "kein Zertifikat",
   "matrix.cellNotAssigned": "{person}, {skill}: nicht zugewiesen. Zuweisen.",
+  "matrix.cellNotAssignedHere": "{person}, {skill}: nicht zugewiesen.",
 
   // CSV
   "csv.record": "Eintrag",
