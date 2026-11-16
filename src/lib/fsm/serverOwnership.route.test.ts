@@ -230,3 +230,58 @@ describe("certificate files are checked on the server (size and content)", () =>
     expect(writesReachingFsm()).toEqual([]);
   });
 });
+
+describe("request bodies are bounded and must be exactly what the app sends", () => {
+  const raw = async (body: BodyInit, headers: Record<string, string> = {}) => {
+    const req = new Request("http://localhost/api/fsm/data/v4/Attachment", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+      duplex: "half",
+    } as RequestInit);
+    const res = await POST(req, { params: Promise.resolve({ path: ["data", "v4", "Attachment"] }) });
+    return { status: res.status, body: (await res.json().catch(() => null)) as { code?: string } | null };
+  };
+
+  it("refuses a body that announces more than the limit, without reading it", async () => {
+    const res = await raw("{}", { "content-length": String(20 * 1024 * 1024) });
+    expect(res.status).toBe(413);
+    expect(writesReachingFsm()).toEqual([]);
+  });
+
+  it("stops reading a streamed body that grows past the limit", async () => {
+    let sent = 0;
+    const chunk = new Uint8Array(1024 * 1024).fill(0x41);
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 20) return controller.close();
+        sent++;
+        controller.enqueue(chunk);
+      },
+    });
+    const res = await raw(stream);
+    expect(res.status).toBe(413);
+    expect(sent).toBeLessThan(20);
+    expect(writesReachingFsm()).toEqual([]);
+  });
+
+  it("refuses a valid file with a large extra field", async () => {
+    const res = await send("POST", "data/v4/Attachment", upload(OWN_SKILL, { padding: "x".repeat(1024) }));
+    expect(res.status).toBe(403);
+    expect(writesReachingFsm()).toEqual([]);
+  });
+
+  it("refuses duplicate keys (FSM might read the other value than we checked)", async () => {
+    const valid = JSON.stringify(upload(OWN_SKILL));
+    const withDuplicate = valid.replace('"fileContent":', `"fileContent":"${Buffer.from("MZ\x90").toString("base64")}","fileContent":`);
+    const res = await raw(withDuplicate);
+    expect(res.status).toBe(403);
+    expect(writesReachingFsm()).toEqual([]);
+  });
+
+  it("refuses JSON that is not written exactly as the app writes it", async () => {
+    const res = await raw(JSON.stringify(upload(OWN_SKILL), null, 2));
+    expect(res.status).toBe(403);
+    expect(writesReachingFsm()).toEqual([]);
+  });
+});

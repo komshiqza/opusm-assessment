@@ -38,6 +38,51 @@ const MAX_BULK_ITEMS = 200;
 
 type Body = () => Promise<unknown>;
 
+/** Largest base64 text a 5 MB file can produce. */
+const MAX_BASE64_LENGTH = Math.ceil(MAX_CERTIFICATE_BYTES / 3) * 4;
+/** Largest request body: one certificate in base64 plus room for its other fields. */
+export const MAX_REQUEST_BYTES = MAX_BASE64_LENGTH + 64 * 1024;
+
+/** Reads the body up to `limit` bytes; null when it is (or announces to be) larger. Stops reading early. */
+async function readBodyLimited(request: Request, limit: number): Promise<string | null> {
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > limit) return null;
+  const stream = request.clone().body;
+  if (!stream) return "";
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      // Cancel both halves of the cloned stream so the client's upload is not read any further.
+      // Not awaited: each half's cancel only completes once the other half is cancelled too.
+      void reader.cancel().catch(() => {});
+      void request.body?.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+/**
+ * The body must be exactly what the app's client sends (`JSON.stringify` output). That refuses
+ * duplicate keys, where FSM might read a different value than the one checked here.
+ */
+function parseExactJson(text: string): unknown {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new OwnershipError("Refused: the request body is not valid JSON.");
+  }
+  if (JSON.stringify(value) !== text) throw new OwnershipError("Refused: the request body is not written the way this app writes it.");
+  return value;
+}
+
 /** Why a write is refused: HTTP status, short code and a message for the user. */
 export interface Refusal {
   status: number;
@@ -61,8 +106,15 @@ const notOwn = (message: string): Refusal => ({ status: 403, code: "NOT_OWN", me
  * Returns null when the request may go on to FSM, otherwise why it is refused.
  * Reads (GET/HEAD, `.../search`, Query API) always pass.
  */
-export async function checkWriteOwnership(segments: string[], method: string, body: Body, reader: OwnershipReader): Promise<Refusal | null> {
+export async function checkWriteOwnership(segments: string[], method: string, request: Request, reader: OwnershipReader): Promise<Refusal | null> {
   if (method === "GET" || method === "HEAD") return null;
+
+  // Every request with a body is size-limited before it is read into memory or parsed.
+  const text = await readBodyLimited(request, MAX_REQUEST_BYTES);
+  if (text === null) {
+    return { status: 413, code: "TOO_LARGE", message: `Refused: the request is larger than ${MAX_CERTIFICATE_LABEL} plus a small margin.` };
+  }
+
   const [api, version, ...rest] = segments;
   if (api === "query" && version === "v1" && rest.length === 0 && method === "POST") return null;
   if (api === "skill" && method === "POST" && rest[rest.length - 1] === "search") return null;
@@ -72,16 +124,9 @@ export async function checkWriteOwnership(segments: string[], method: string, bo
     const key = `${method} ${api}/${version}/${rest.map((s, i) => (i === 0 || /^(skills|search)$/.test(s) ? s : ":id")).join("/")}`;
     const check = CHECKS[key];
     if (!check) return notOwn(`Refused: ${method} ${segments.join("/")} is not a write this app makes.`);
-    // Receive the whole body before any ownership lookup, so a slow client cannot hold a finished
-    // check open while ownership changes in FSM. A body that cannot be read is refused when used.
-    const received = await body().then(
-      (value) => ({ ok: true as const, value }),
-      () => ({ ok: false as const }),
-    );
-    const parsedBody: Body = async () => {
-      if (!received.ok) throw new OwnershipError("Refused: the request body is not valid JSON.");
-      return received.value;
-    };
+    // The whole body is already received (above), before any ownership lookup, so a slow client
+    // cannot hold a finished check open while ownership changes in FSM.
+    const parsedBody: Body = async () => parseExactJson(text);
     await check({ rest, body: parsedBody, reader });
     return null;
   } catch (e) {
@@ -156,12 +201,15 @@ const CHECKS: Record<string, (input: CheckInput) => Promise<void>> = {
   },
 };
 
-/** Largest base64 text a 5 MB file can produce; anything longer is refused before decoding. */
-const MAX_BASE64_LENGTH = Math.ceil(MAX_CERTIFICATE_BYTES / 3) * 4;
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 /** Same rules as the browser: real decoded size, content type by magic bytes, matching name and declared type. */
+const ATTACHMENT_FIELDS = new Set(["fileName", "title", "description", "type", "fileContent", "object"]);
+const OBJECT_FIELDS = new Set(["objectId", "objectType"]);
+
 function assertCertificateFile(attachment: Record<string, unknown>) {
+  const unknown = [...Object.keys(attachment).filter((k) => !ATTACHMENT_FIELDS.has(k)), ...Object.keys(asObject(attachment.object)).filter((k) => !OBJECT_FIELDS.has(k))];
+  if (unknown.length) throw new FileRuleError(`Refused: unexpected fields in the certificate upload (${unknown.join(", ")}).`);
   const { fileName, type, fileContent } = attachment;
   if (typeof fileName !== "string" || typeof type !== "string" || typeof fileContent !== "string") {
     throw new FileRuleError("Refused: a certificate needs a file name, a type and the file content.");
