@@ -127,6 +127,7 @@ export const en = {
   "matrix.cellNotAssigned": "{person}, {skill}: not assigned. Assign.",
 
   // CSV
+  "csv.record": "Record",
   "csv.jobTitle": "Job title",
   "csv.column": "{skill} – {column}",
 

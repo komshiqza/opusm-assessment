@@ -223,6 +223,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             downloadCsv(
               matrixCsv(
                 visiblePersons,
+                typeOf,
                 visibleSkills,
                 (personId, tagId) => assignmentByCell.get(cellKey(personId, tagId)),
                 (assignmentId) => certificatesBySkill.get(assignmentId)?.length ?? 0,

@@ -126,6 +126,7 @@ export const de: Record<MessageKey, string> = {
   "matrix.cellNotAssigned": "{person}, {skill}: nicht zugewiesen. Zuweisen.",
 
   // CSV
+  "csv.record": "Eintrag",
   "csv.jobTitle": "Funktion",
   "csv.column": "{skill} – {column}",
 
