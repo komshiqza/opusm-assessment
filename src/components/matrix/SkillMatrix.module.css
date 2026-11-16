@@ -294,14 +294,14 @@
   color: var(--sapLinkColor);
 }
 
-/* Empty cell of a linked Employee record: no assign action, only the hint in the tooltip. */
+/* Empty cell of a linked Employee record: plain "–", no action (the row says why). */
 .cellLocked {
   display: grid;
   align-items: center;
   min-height: 2.75rem;
   padding: 0.375rem 0.5rem;
   font-size: var(--sapFontSmallSize);
-  cursor: default;
+  color: var(--sapContent_LabelColor);
 }
 
 /* Text for screen readers only. */
@@ -335,8 +335,17 @@
 .tableActions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
   margin-left: auto;
+}
+
+/* Between the groups of the table toolbar (Fiori: each group after the first starts with a separator). */
+.toolbarSeparator {
+  width: 0.0625rem;
+  height: 1.5rem;
+  margin-inline: 0.25rem;
+  background: var(--sapToolbar_SeparatorColor);
 }
 
 /* Phone: one card per person with the skills stacked */

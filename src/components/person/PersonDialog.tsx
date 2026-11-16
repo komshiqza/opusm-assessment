@@ -52,11 +52,12 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
       }
     >
       <div className={styles.summary}>
-        <Text>{[person.jobTitle, formatPersonType(person.type)].filter(Boolean).join(" · ") || " "}</Text>
+        <Text>
+          {[person.jobTitle, formatPersonType(person.type), secondary.has(records[0].id) ? t("matrix.mainRecordNote") : ""].filter(Boolean).join(" · ") || " "}
+        </Text>
         <Text className={styles.muted}>
           {t("personView.summary", { held, total })}
         </Text>
-        {secondary.has(records[0].id) && <Text className={styles.muted}>{t("matrix.assignOnMain")}</Text>}
       </div>
       <PersonSkills
         personName={person.name}

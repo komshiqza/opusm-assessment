@@ -118,7 +118,7 @@ export const en = {
   "matrix.noSkillsHint": "Create your first skill in the catalogue, then assign it here.",
   "matrix.goToCatalogue": "Go to skill catalogue",
   "matrix.notAssignedList": "Not assigned:",
-  "matrix.assignOnMain": "Assign skills on the ERP user record",
+  "matrix.mainRecordNote": "skills are kept on the ERP user record",
   "matrix.cellLabel": "{person}, {skill}: {status}{level}, {certificates}. Edit.",
   "matrix.cellLevel": ", level {level}",
   "matrix.cellCertificates_one": "1 certificate",

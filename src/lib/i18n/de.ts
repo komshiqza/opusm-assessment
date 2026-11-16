@@ -117,7 +117,7 @@ export const de: Record<MessageKey, string> = {
   "matrix.noSkillsHint": "Legen Sie Ihre erste Qualifikation im Katalog an und weisen Sie sie anschliessend hier zu.",
   "matrix.goToCatalogue": "Zum Qualifikationskatalog",
   "matrix.notAssignedList": "Nicht zugewiesen:",
-  "matrix.assignOnMain": "Qualifikationen auf dem ERP-Benutzer-Eintrag zuweisen",
+  "matrix.mainRecordNote": "Qualifikationen werden auf dem ERP-Benutzer-Eintrag geführt",
   "matrix.cellLabel": "{person}, {skill}: {status}{level}, {certificates}. Bearbeiten.",
   "matrix.cellLevel": ", Stufe {level}",
   "matrix.cellCertificates_one": "1 Zertifikat",

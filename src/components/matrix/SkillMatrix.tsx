@@ -90,6 +90,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   /** "ERP user" etc. only with "All person records", or where two records of one person are listed. */
   const needsType = recordsNeedingType(visiblePersons);
   const typeOf = (p: Person) => (showAllRecords || needsType.has(p.id) ? formatPersonType(p.type) : "");
+  /** The record type, and on a linked Employee row (only with "All person records") once, visibly, why its empty cells cannot be assigned. */
+  const recordText = (p: Person) => [typeOf(p), showAllRecords && secondary.has(p.id) ? t("matrix.mainRecordNote") : ""].filter(Boolean).join(" · ");
 
   /** Counts over all rows and the visible skills (independent of the person and status filter). */
   const counts = { upcoming: 0, valid: 0, expiring: 0, expired: 0 };
@@ -256,6 +258,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           <Button design="Transparent" icon="add-employee" onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
             {t("matrix.bulk")}
           </Button>
+          {/* Fiori table toolbar: business actions first, then each further group (here: export) after a separator. */}
+          <span className={styles.toolbarSeparator} role="separator" aria-orientation="vertical" />
           <Button
             design="Transparent"
             icon="excel-attachment"
@@ -291,7 +295,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                 <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })}>
                   {p.name}
                 </Link>
-                <span className={styles.personMeta}>{[p.jobTitle, typeOf(p)].filter(Boolean).join(" · ")}</span>
+                <span className={styles.personMeta}>{[p.jobTitle, recordText(p)].filter(Boolean).join(" · ")}</span>
               </div>
               <ul className={styles.cardSkills}>
                 {visibleSkills
@@ -306,11 +310,6 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                     </li>
                   ))}
               </ul>
-              {secondary.has(p.id) && visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
-                <div className={styles.cardMissing}>
-                  <span className={styles.personMeta}>{t("matrix.assignOnMain")}</span>
-                </div>
-              )}
               {!secondary.has(p.id) && visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
                 <div className={styles.cardMissing}>
                   <span className={styles.personMeta}>{t("matrix.notAssignedList")}</span>
@@ -365,10 +364,10 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                         {p.jobTitle && (
                           <span className={styles.jobTitle}>
                             {p.jobTitle}
-                            {typeOf(p) ? " · " : ""}
+                            {recordText(p) ? " · " : ""}
                           </span>
                         )}
-                        {typeOf(p)}
+                        {recordText(p)}
                       </span>
                     </th>
                     {visibleSkills.map((d) => {
@@ -376,14 +375,11 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                       return (
                         <td key={d.id} className={styles.cell} data-status={info.status}>
                           {info.action === "assignOnMain" ? (
-                            // A secondary record: no new skill here, only a hint (existing ones open as usual).
-                            <span className={styles.cellLocked} title={t("matrix.assignOnMain")}>
-                              <span className={styles.empty}>
-                                <span aria-hidden>–</span>
-                                <span className={styles.srOnly}>
-                                  {info.label}. {t("matrix.assignOnMain")}
-                                </span>
-                              </span>
+                            // A linked Employee record: no new skill here, so no action at all (Fiori: hide what can
+                            // never be enabled). The row says why, next to the record type. Existing skills open as usual.
+                            <span className={styles.cellLocked}>
+                              <span aria-hidden>–</span>
+                              <span className={styles.srOnly}>{info.label}</span>
                             </span>
                           ) : (
                             <button
