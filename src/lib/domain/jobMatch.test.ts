@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkSkillForJob, matchTechnicians } from "./jobMatch";
+import { checkSkillForJob, matchTechnicians, minimumLevelLabel } from "./jobMatch";
 import { isValidOn } from "./status";
 
 const JOB = "2026-12-15";
@@ -140,5 +140,23 @@ describe("people without a job title", () => {
       ["tech", true],
       ["staff", false],
     ]);
+  });
+});
+
+describe("minimumLevelLabel (the 'Minimum level' choices)", () => {
+  const scale = [
+    { level: 1, name: "Basic" },
+    { level: 2, name: "Advanced" },
+    { level: 3, name: "Expert" },
+  ];
+
+  it("says 'or higher' for every level that has a higher one", () => {
+    expect(minimumLevelLabel(scale[0], scale)).toBe("Basic or higher");
+    expect(minimumLevelLabel(scale[1], scale)).toBe("Advanced or higher");
+  });
+
+  it("names the highest level of the scale on its own, also when the scale is not sorted", () => {
+    expect(minimumLevelLabel(scale[2], scale)).toBe("Expert");
+    expect(minimumLevelLabel(scale[2], [scale[2], scale[0], scale[1]])).toBe("Expert");
   });
 });

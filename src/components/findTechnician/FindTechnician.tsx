@@ -19,7 +19,7 @@ import {
   Text,
   Title,
 } from "@ui5/webcomponents-react";
-import { checkSkillForJob, matchTechnicians } from "@/lib/domain/jobMatch";
+import { checkSkillForJob, matchTechnicians, minimumLevelLabel } from "@/lib/domain/jobMatch";
 import { normalizeEndDate } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { validateValidity } from "@/lib/domain/validation";
@@ -169,7 +169,7 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
               <Option value={ANY_LEVEL}>Any level</Option>
               {levels.map((l) => (
                 <Option key={l.id} value={l.id}>
-                  {l.name} or higher
+                  {minimumLevelLabel(l, levels)}
                 </Option>
               ))}
             </Select>

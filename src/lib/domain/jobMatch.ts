@@ -88,3 +88,9 @@ export function matchTechnicians<P extends { id: string; name: string }, S exten
   result.missingOne.sort(technicianFirst);
   return result;
 }
+
+/** "Advanced or higher" in the "Minimum level" choices; the highest level of the scale is just its name. */
+export function minimumLevelLabel(level: { level: number; name: string }, scale: { level: number }[]): string {
+  const highest = Math.max(...scale.map((l) => l.level));
+  return level.level >= highest ? level.name : `${level.name} or higher`;
+}
