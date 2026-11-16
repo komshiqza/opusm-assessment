@@ -751,6 +751,21 @@ describe("assign one skill to several persons", () => {
     }
   });
 
+  it("a create whose connection breaks after FSM saved it is checked and reported as assigned (Codex finding)", async () => {
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      const response = await base(input, init);
+      if (String(input).includes("skill/v2/skills") && (init.method ?? "GET").toUpperCase() === "POST") {
+        arrives = new Set([people[0]]); // FSM saved it ...
+        throw new TypeError("Failed to fetch"); // ... but the answer never reached the browser
+      }
+      return response;
+    });
+    const [result] = await bulkAssign(OWN_TAG, [people[0]], input);
+    expect(result.result).toBe("assigned");
+    expect(creates()).toEqual([people[0]]);
+  });
+
   it("a timed-out create whose check fails stays 'not confirmed' and is only checked again", async () => {
     vi.useFakeTimers();
     try {

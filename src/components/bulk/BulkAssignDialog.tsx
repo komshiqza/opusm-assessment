@@ -21,7 +21,8 @@ import {
 import { BULK_LIMIT, bulkAssign, recheckBulk, retryBulk, type BulkResult } from "@/lib/skills/repository";
 import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
 import { toUserMessage } from "@/lib/errors";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPersonType } from "@/lib/format";
+import { recordsNeedingType } from "@/lib/domain/persons";
 import { useToday } from "@/hooks/useToday";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import type { Person } from "@/lib/skills/types";
@@ -72,7 +73,14 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
   const plan = planBulk(selected, hasSkill);
   const dateError = validateValidity(effectiveStartDate(from || null, today), to || null);
   const input = { startDate: from || null, endDate: to || null, proficiencyId: definitionLevels.length ? levelId || null : null };
-  const nameOf = (personId: string) => persons.find((p) => p.id === personId)?.name ?? personId;
+  /** Two records of one person (ERP user and Employee) look alike: their record type tells them apart. */
+  const needsType = recordsNeedingType(persons);
+  const describe = (p: Person) => [p.jobTitle, needsType.has(p.id) ? formatPersonType(p.type) : ""].filter(Boolean).join(" · ") || undefined;
+  const nameOf = (personId: string) => {
+    const person = persons.find((p) => p.id === personId);
+    if (!person) return personId;
+    return needsType.has(person.id) ? `${person.name} (${formatPersonType(person.type)})` : person.name;
+  };
 
   const run = async (work: () => Promise<void>) => {
     if (operationRef.current) return;
@@ -259,7 +267,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
                     key={p.id}
                     data-id={p.id}
                     selected={selected.includes(p.id)}
-                    description={p.jobTitle ?? undefined}
+                    description={describe(p)}
                     additionalText={hasSkill(p.id) ? t("bulk.alreadyHas") : undefined}
                   >
                     {p.name}

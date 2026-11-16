@@ -52,3 +52,22 @@ describe("FSM request timeout", () => {
     expect(settled).toBe(true);
   });
 });
+
+describe("a write whose connection breaks (no answer, but FSM may have saved it)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is reported as an unknown result, like a timeout, never as a plain failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
+    const error = await skillApi("v2/skills", { method: "POST", body: [{ tagId: "X" }] }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FsmTimeoutError);
+    expect((error as FsmTimeoutError).write).toBe(true);
+    expect(toUserMessage(error)).toMatch(/could not be reached/);
+  });
+
+  it("a read whose connection breaks just asks to try again", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
+    const error = await skillSearch("v1/skills").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FsmTimeoutError);
+    expect((error as FsmTimeoutError).write).toBe(false);
+  });
+});

@@ -26,11 +26,19 @@ export const FSM_TIMEOUT_MS = 60_000;
  * must check (reload) before trying again, never simply retry.
  */
 export class FsmTimeoutError extends FsmError {
-  constructor(public readonly write: boolean) {
+  /**
+   * FSM gave no answer: it did not answer in time ("timeout"), or the connection broke ("connection").
+   * For a write the result is unknown either way: FSM may have saved it.
+   */
+  constructor(
+    public readonly write: boolean,
+    reason: "timeout" | "connection" = "timeout",
+  ) {
+    const seconds = FSM_TIMEOUT_MS / 1000;
     super(
-      write
-        ? t("fsm.timeoutWrite", { seconds: FSM_TIMEOUT_MS / 1000 })
-        : t("fsm.timeoutRead", { seconds: FSM_TIMEOUT_MS / 1000 }),
+      reason === "timeout"
+        ? t(write ? "fsm.timeoutWrite" : "fsm.timeoutRead", { seconds })
+        : t(write ? "fsm.connectionWrite" : "fsm.connectionRead"),
       0,
     );
     this.name = "FsmTimeoutError";
@@ -51,6 +59,8 @@ async function fetchWithTimeout<T>(url: string, init: RequestInit, write: boolea
     return await read(await fetch(url, { ...init, signal: controller.signal }));
   } catch (e) {
     if (controller.signal.aborted) throw new FsmTimeoutError(write);
+    // fetch rejects with a TypeError when the connection breaks: no answer, like a timeout.
+    if (e instanceof TypeError) throw new FsmTimeoutError(write, "connection");
     throw e;
   } finally {
     clearTimeout(timer);
