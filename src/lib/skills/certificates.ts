@@ -163,8 +163,9 @@ export async function createAssignmentWithCertificates(
   input: AssignmentInput,
   files: File[],
   onProgress?: (file: File, index: number, total: number) => void,
+  personRecords: string[] = [personId],
 ): Promise<{ assignment: Assignment } & UploadOutcome> {
-  const assignment = await createAssignment(tagId, personId, input);
+  const assignment = await createAssignment(tagId, personId, input, personRecords);
   return { assignment, ...(await uploadCertificates(assignment.id, files, onProgress)) };
 }
 

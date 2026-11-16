@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellAction, compactStatusText, emptyCellLabel, statusText } from "./statusDisplay";
+import { compactStatusText, statusText } from "./statusDisplay";
 
 const assignment = (startDate: string | null, endDate: string | null) => ({ startDate, endDate });
 
@@ -21,23 +21,5 @@ describe("compactStatusText (narrow matrix cells: icon plus a short date)", () =
   it("keeps the long text for wide screens", () => {
     expect(statusText("valid", assignment(null, "2027-09-12"))).toBe("Valid to 12.09.2027");
     expect(compactStatusText("none", null)).toBe("");
-  });
-});
-
-describe("cellAction (a matrix cell or a phone-card line: what a click does)", () => {
-  it.each([
-    [true, false, "open", "a held skill on a main record"],
-    [true, true, "open", "a held skill on a secondary record stays fully usable"],
-    [false, false, "assign", "an empty cell on a main record"],
-    [false, true, "assignOnMain", "an empty cell on a secondary record: no new skill here"],
-  ] as const)("assigned %s, secondary %s → %s (%s)", (assigned, secondary, expected, _why) => {
-    expect(cellAction(assigned, secondary)).toBe(expected);
-  });
-});
-
-describe("emptyCellLabel (what a screen reader hears on an empty cell)", () => {
-  it("offers 'Assign.' only where a skill can be assigned", () => {
-    expect(emptyCellLabel("Anna Schneider", "First aid", "assign")).toBe("Anna Schneider, First aid: not assigned. Assign.");
-    expect(emptyCellLabel("Anna Schneider", "First aid", "assignOnMain")).toBe("Anna Schneider, First aid: not assigned.");
   });
 });

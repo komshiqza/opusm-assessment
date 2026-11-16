@@ -2,7 +2,7 @@
  * All FSM access of the app. UI components never call the FSM client directly.
  *
  * Which API for what (details in README.md):
- * - Query API:     persons, certificates (one query for many skills)
+ * - Query API:     people (UnifiedPerson) and their Person records, certificates (one query for many skills)
  * - Skill Service: tags (incl. scaleId), skills (incl. proficiency), scales and levels; tag and skill writes
  * - Data API:      attachments (upload, download, delete); the only API that handles files
  *
@@ -12,6 +12,7 @@
 import { assertBulkOk, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
+import { buildPeople } from "@/lib/domain/persons";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
 import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
 import { effectiveStartDate, validateSkillName, validateValidity } from "@/lib/domain/validation";
@@ -28,20 +29,36 @@ const IN_CHUNK = 100;
 
 // --- Reads ------------------------------------------------------------------------
 
+/**
+ * One entry per real person: the active UnifiedPerson rows (SAP's "single, unified record" of a
+ * human), and the active Person records, which are matched to them by refId (see src/lib/domain/persons.ts).
+ */
 export async function loadPersons(): Promise<Person[]> {
-  const rows = await fsmQuery<{ p: FsmPerson & { userName?: string | null; refId?: string | null } }>(
-    "SELECT p.id, p.refId, p.firstName, p.lastName, p.jobTitle, p.type, p.userName FROM Person p WHERE p.inactive = false",
-    ["Person"],
+  const [unified, records] = await Promise.all([
+    fsmQuery<{ u: UnifiedPersonFields }>(
+      "SELECT u.id, u.refId, u.firstName, u.lastName, u.userName, u.jobTitle FROM UnifiedPerson u WHERE u.inactive = false",
+      ["UnifiedPerson"],
+    ),
+    fsmQuery<{ p: Pick<FsmPerson, "id" | "type"> & { refId?: string | null } }>("SELECT p.id, p.refId, p.type FROM Person p WHERE p.inactive = false", ["Person"]),
+  ]);
+  return buildPeople(
+    unified.map(({ u }) => ({
+      id: u.id,
+      refId: u.refId ?? null,
+      name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.userName || "Unnamed person",
+      jobTitle: u.jobTitle ?? null,
+    })),
+    records.map(({ p }) => ({ id: p.id, refId: p.refId ?? null, type: p.type ?? null })),
   );
-  return rows
-    .map(({ p }) => ({
-      id: p.id,
-      name: [p.firstName, p.lastName].filter(Boolean).join(" ") || p.userName || "Unnamed person",
-      jobTitle: p.jobTitle ?? null,
-      type: p.type ?? null,
-      refId: p.refId ?? null,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name) || (a.type ?? "").localeCompare(b.type ?? ""));
+}
+
+interface UnifiedPersonFields {
+  id: string;
+  refId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  userName?: string | null;
+  jobTitle?: string | null;
 }
 
 function likeOwn(field: string) {
@@ -337,15 +354,23 @@ export class AssignmentExistsError extends Error {
   }
 }
 
-export async function createAssignment(tagId: string, personId: string, input: AssignmentInput): Promise<Assignment> {
+/**
+ * Creates the assignment on `personId`, the person's main Person record. `personRecords`: all Person
+ * records of the same person; if any of them already holds this skill, nothing is written (a person's
+ * skill can sit on a linked record, see src/lib/domain/persons.ts).
+ */
+export async function createAssignment(tagId: string, personId: string, input: AssignmentInput, personRecords: string[] = [personId]): Promise<Assignment> {
   const dates = toWritableDates(input);
   assertFsmId(personId);
   await assertOwnTag(tagId);
-  const existing = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [
-    { field: "tag.id", operator: "=", value: tagId },
-    { field: "technicianId", operator: "=", value: personId },
-  ]);
-  if (existing.some((s) => !s.deleted)) throw new AssignmentExistsError();
+  for (const recordId of new Set([personId, ...personRecords])) {
+    assertFsmId(recordId);
+    const existing = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [
+      { field: "tag.id", operator: "=", value: tagId },
+      { field: "technicianId", operator: "=", value: recordId },
+    ]);
+    if (existing.some((s) => !s.deleted)) throw new AssignmentExistsError();
+  }
 
   const [skill] = assertBulkOk<SkillServiceSkill>(
     await skillApi("v2/skills", {

@@ -3,8 +3,7 @@
 import { Bar, Button, Dialog, Text } from "@ui5/webcomponents-react";
 import { useToday } from "@/hooks/useToday";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
-import { formatPersonType } from "@/lib/format";
-import { secondaryRecordIds } from "@/lib/domain/persons";
+import { linkedRecordNote } from "@/lib/format";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { PersonSkills } from "./PersonSkills";
 import { personSkillRows, personSkillSummary } from "./personSkillRows";
@@ -13,26 +12,26 @@ import { t } from "@/lib/i18n/t";
 
 interface PersonDialogProps {
   person: Person;
-  /** All records of this person, the main one first (from Find technician); default: just `person`. */
-  records?: Person[];
   state: SkillDataState;
-  /** Opens the assignment dialog for one skill (it opens on top; this view updates after a save). */
-  onOpenCell: (person: Person, definition: SkillDefinition) => void;
+  /** Opens the assignment dialog for one skill of one record (it opens on top; this view updates after a save). */
+  onOpenCell: (person: Person, definition: SkillDefinition, recordId?: string) => void;
   onClose: () => void;
 }
 
-/** All skills and certificates of one person, from data the app already loaded. */
-export function PersonDialog({ person, records = [person], state, onOpenCell, onClose }: PersonDialogProps) {
+/**
+ * All skills and certificates of one person, across all of their Person records (from data the app
+ * already loaded). A skill held by two records is listed twice, so nothing is hidden.
+ */
+export function PersonDialog({ person, state, onOpenCell, onClose }: PersonDialogProps) {
   const today = useToday();
   const rows = personSkillRows(
-    records.map((r) => r.id),
+    person.records.map((r) => r.id),
     state.data?.definitions ?? [],
-    (personId, tagId) => state.assignmentByCell.get(cellKey(personId, tagId)),
+    (recordId, tagId) => state.assignmentByRecord.get(cellKey(recordId, tagId)),
     state.certificatesBySkill,
     today,
   );
   const { held, total } = personSkillSummary(rows);
-  const secondary = secondaryRecordIds(state.data?.persons ?? []);
 
   return (
     <Dialog
@@ -53,7 +52,7 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
     >
       <div className={styles.summary}>
         <Text>
-          {[person.jobTitle, formatPersonType(person.type), secondary.has(records[0].id) ? t("matrix.mainRecordNote") : ""].filter(Boolean).join(" · ") || " "}
+          {person.jobTitle || " "}
         </Text>
         <Text className={styles.muted}>
           {t("personView.summary", { held, total })}
@@ -62,9 +61,8 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
       <PersonSkills
         personName={person.name}
         rows={rows}
-        secondary={secondary}
-        recordLabel={(recordId) => formatPersonType(records.find((r) => r.id === recordId)?.type ?? null)}
-        onOpenSkill={(definition, recordId) => onOpenCell(records.find((r) => r.id === recordId) ?? person, definition)}
+        recordNote={(recordId) => linkedRecordNote(person, recordId)}
+        onOpenSkill={(definition, recordId) => onOpenCell(person, definition, recordId)}
       />
     </Dialog>
   );

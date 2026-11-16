@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkSkillForJob, heldAcrossRecords, jobDayLabel, matchTechnicians, minimumLevelLabel } from "./jobMatch";
-import { groupPersonRecords } from "./persons";
+import { buildPeople } from "./persons";
 import { isValidOn } from "./status";
 
 const JOB = "2026-12-15";
@@ -155,21 +155,20 @@ describe("people without a job title", () => {
 });
 
 describe("one person with several records (ERP user and Employee, linked by refId)", () => {
-  const anna = [
-    { id: "annaU", name: "Anna Schneider", type: "ERPUSER", refId: "annaU", jobTitle: "Service Technician" },
-    { id: "annaE", name: "Anna Schneider", type: "EMPLOYEE", refId: "annaU", jobTitle: "Service Technician" },
-  ];
+  // The same list every screen uses (src/lib/domain/persons.ts): Employee record listed first on purpose.
+  const anna = buildPeople(
+    [{ id: "U-ANNA", refId: "annaU", name: "Anna Schneider", jobTitle: "Service Technician" }],
+    [
+      { id: "annaE", refId: "annaU", type: "EMPLOYEE" },
+      { id: "annaU", refId: "annaU", type: "ERPUSER" },
+    ],
+  );
   const welding = { id: "weld", name: "Welding" };
   const match = (held: Record<string, ReturnType<typeof assignment>>, required: { id: string; name: string }[], min: { level: number; name: string } | null = null) => {
-    const groups = groupPersonRecords(anna);
+    const groups = anna.map((person) => ({ person, records: person.records }));
     const lookup = heldAcrossRecords(groups, (p, s) => held[`${p}|${s}`], JOB, TODAY, min);
     return { lookup, result: matchTechnicians(groups.map((g) => g.person), required, (p, s) => lookup(p, s)?.held, JOB, TODAY, min) };
   };
-
-  it("is one person, shown by the ERP user record, which comes first among her records (also when the list has Employee first)", () => {
-    expect(groupPersonRecords(anna).map((g) => [g.person.id, g.records.map((r) => r.id)])).toEqual([["annaU", ["annaU", "annaE"]]]);
-    expect(groupPersonRecords([anna[1], anna[0]]).map((g) => [g.person.id, g.records.map((r) => r.id)])).toEqual([["annaU", ["annaU", "annaE"]]]);
-  });
 
   it("is ready when the job's skills are spread over her records (Welding on Employee, First aid on ERP user)", () => {
     const { result } = match({ "annaE|weld": assignment(), "annaU|aid": assignment() }, [welding, firstAid]);

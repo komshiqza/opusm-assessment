@@ -5,7 +5,7 @@ import { Button, Icon, Link, Table, TableCell, TableHeaderCell, TableHeaderRow, 
 import { formatDate } from "@/lib/format";
 import { toUserMessage } from "@/lib/errors";
 import type { Certificate, SkillDefinition } from "@/lib/skills/types";
-import { STATUS_DISPLAY, cellAction, statusText } from "@/components/matrix/statusDisplay";
+import { STATUS_DISPLAY, statusText } from "@/components/matrix/statusDisplay";
 import { CertificatePreview } from "@/components/assignment/CertificatePreview";
 import { saveCertificate } from "@/components/assignment/saveCertificate";
 import type { PersonSkillRow } from "./personSkillRows";
@@ -15,10 +15,8 @@ import { t } from "@/lib/i18n/t";
 interface PersonSkillsProps {
   personName: string;
   rows: PersonSkillRow<SkillDefinition>[];
-  /** "ERP user", "Employee": shown next to a skill that two of the person's records hold. */
-  recordLabel?: (recordId: string) => string;
-  /** Linked Employee records (src/lib/domain/persons.ts): no "Assign" there, new skills go on the main record. */
-  secondary?: Set<string>;
+  /** "on Employee record" next to a skill held by one of the person's linked records ("" for the main one). */
+  recordNote?: (recordId: string) => string;
   /**
    * Edit or assign one skill. Leave it out for a read-only list (e.g. a later "my skills" view for
    * technicians): then no Edit or Assign buttons are shown, only status, dates and certificates.
@@ -27,7 +25,7 @@ interface PersonSkillsProps {
 }
 
 /** All skills of one person: status, valid from/to, level and certificates (open or download). */
-export function PersonSkills({ personName, rows, recordLabel, secondary, onOpenSkill }: PersonSkillsProps) {
+export function PersonSkills({ personName, rows, recordNote, onOpenSkill }: PersonSkillsProps) {
   const [previewed, setPreviewed] = useState<Certificate | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -51,11 +49,11 @@ export function PersonSkills({ personName, rows, recordLabel, secondary, onOpenS
           </TableHeaderRow>
         }
       >
-        {rows.map(({ definition, assignment, status, certificates, holderId, heldTwice }) => (
+        {rows.map(({ definition, assignment, status, certificates, holderId }) => (
           <TableRow key={`${definition.id}|${holderId}`} rowKey={`${definition.id}|${holderId}`}>
             <TableCell>
               <Text style={{ fontWeight: "bold" }}>{definition.name}</Text>
-              {heldTwice && recordLabel && <Text className={styles.muted}> · {recordLabel(holderId)}</Text>}
+              {assignment && recordNote?.(holderId) && <Text className={styles.muted}> · {recordNote(holderId)}</Text>}
             </TableCell>
             <TableCell>
               <span className={styles.status} style={{ color: STATUS_DISPLAY[status].color }}>
@@ -94,12 +92,7 @@ export function PersonSkills({ personName, rows, recordLabel, secondary, onOpenS
                 </ul>
               )}
             </TableCell>
-            {onOpenSkill && cellAction(Boolean(assignment), secondary?.has(holderId) ?? false) === "assignOnMain" ? (
-              // A linked Employee record: no "Assign" (the dialog says once where to assign instead).
-              <TableCell horizontalAlign="End">
-                <Text className={styles.muted}>–</Text>
-              </TableCell>
-            ) : onOpenSkill ? (
+            {onOpenSkill ? (
               <TableCell horizontalAlign="End">
                 <Button
                   design="Transparent"

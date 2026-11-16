@@ -54,7 +54,8 @@ export function SkillManagementApp() {
   const state = useSkillData();
   /** The tab the user picked; until then the app shows the first tab of the current order. */
   const [pickedTab, setTab] = useState<TabKey | null>(null);
-  const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition } | null>(null);
+  /** `recordId`: open the assignment of exactly this Person record (e.g. a second one on a linked record). */
+  const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition; recordId?: string } | null>(null);
   const isPhone = useMediaQuery(PHONE_QUERY);
   const themeMenu = useThemeMenu();
   const languageMenu = useThemeMenu();
@@ -65,11 +66,10 @@ export function SkillManagementApp() {
   const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
   const tab = pickedTab ?? order[0];
-  const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
+  const openCell = (person: Person, definition: SkillDefinition, recordId?: string) => setCell({ person, definition, recordId });
   /** The person whose skills are shown (the assignment dialog can open on top of it). */
-  /** The person whose skills are shown; `records`: all of their linked records (Find technician). */
-  const [personShown, setPersonShown] = useState<{ person: Person; records?: Person[] } | null>(null);
-  const showPerson = (person: Person, records?: Person[]) => setPersonShown({ person, records });
+  const [personShown, setPersonShown] = useState<Person | null>(null);
+  const showPerson = (person: Person) => setPersonShown(person);
 
   /** After a move the strip is rebuilt; put keyboard focus back on the moved tab. */
   const focusAfterMove = useRef<TabKey | null>(null);
@@ -209,8 +209,8 @@ export function SkillManagementApp() {
         )}
       </main>
 
-      {personShown && <PersonDialog person={personShown.person} records={personShown.records} state={state} onOpenCell={openCell} onClose={() => setPersonShown(null)} />}
-      {cell && <AssignmentDialog key={`${cell.person.id}|${cell.definition.id}`} {...cell} state={state} onClose={() => setCell(null)} />}
+      {personShown && <PersonDialog person={personShown} state={state} onOpenCell={openCell} onClose={() => setPersonShown(null)} />}
+      {cell && <AssignmentDialog key={`${cell.person.id}|${cell.definition.id}|${cell.recordId ?? ""}`} {...cell} state={state} onClose={() => setCell(null)} />}
     </ToastProvider>
   );
 }

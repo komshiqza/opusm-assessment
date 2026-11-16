@@ -12,12 +12,6 @@ export function planBulk(selected: string[], hasSkill: (personId: string) => boo
   return { toAssign, skip, send, overLimit: send.length > BULK_LIMIT };
 }
 
-/** Who can be picked: not the secondary records (new skills go on the main record); `leftOut` is counted for a note. */
-export function bulkCandidates<P extends { id: string }>(persons: P[], secondary: Set<string>): { selectable: P[]; leftOut: number } {
-  const selectable = persons.filter((p) => !secondary.has(p.id));
-  return { selectable, leftOut: persons.length - selectable.length };
-}
-
 /** Replaces the lines of the persons a retry or check was for; the other lines stay as they are. */
 export function mergeResults(current: BulkResult[], update: BulkResult[]): BulkResult[] {
   const byPerson = new Map(update.map((r) => [r.personId, r]));

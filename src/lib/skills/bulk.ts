@@ -26,14 +26,18 @@ function fromCheck(personId: string, check: WriteCheck<Assignment>): BulkResult 
   return { personId, result: "unconfirmed", error: check.error };
 }
 
+/** All Person records of a person (main first); a skill on any of them means "already has it". */
+export type RecordsOf = (personId: string) => string[];
+const onlyItself: RecordsOf = (personId) => [personId];
+
 /** One person: the same guarded create as a single assignment, with the same timeout check. */
-async function assignOne(tagId: string, personId: string, input: AssignmentInput, checkFirst: boolean): Promise<BulkResult> {
+async function assignOne(tagId: string, personId: string, input: AssignmentInput, checkFirst: boolean, recordsOf: RecordsOf): Promise<BulkResult> {
   if (checkFirst) {
     const check = await checkAssignmentCreated(tagId, personId);
     if (check.result !== "notDone") return fromCheck(personId, check);
   }
   try {
-    await createAssignment(tagId, personId, input);
+    await createAssignment(tagId, personId, input, recordsOf(personId));
     return { personId, result: "assigned" };
   } catch (e) {
     if (e instanceof AssignmentExistsError) return { personId, result: "skipped" };
@@ -52,21 +56,22 @@ export async function bulkAssign(
   personIds: string[],
   input: AssignmentInput,
   onProgress?: (index: number, total: number) => void,
+  recordsOf: RecordsOf = onlyItself,
 ): Promise<BulkResult[]> {
   if (personIds.length > BULK_LIMIT) throw new Error(t("bulk.limit", { max: BULK_LIMIT }));
   toWritableDates(input); // invalid dates: stop before the first write
   const results: BulkResult[] = [];
   for (const [index, personId] of personIds.entries()) {
     onProgress?.(index, personIds.length);
-    results.push(await assignOne(tagId, personId, input, false));
+    results.push(await assignOne(tagId, personId, input, false, recordsOf));
   }
   return results;
 }
 
 /** Try again for the failed persons only; a timed-out one is looked up in FSM first, never created twice. */
-export async function retryBulk(tagId: string, failed: BulkResult[], input: AssignmentInput): Promise<BulkResult[]> {
+export async function retryBulk(tagId: string, failed: BulkResult[], input: AssignmentInput, recordsOf: RecordsOf = onlyItself): Promise<BulkResult[]> {
   const results: BulkResult[] = [];
-  for (const r of failed) results.push(await assignOne(tagId, r.personId, input, r.checkFirst ?? false));
+  for (const r of failed) results.push(await assignOne(tagId, r.personId, input, r.checkFirst ?? false, recordsOf));
   return results;
 }
 

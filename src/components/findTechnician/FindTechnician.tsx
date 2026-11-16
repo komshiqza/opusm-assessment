@@ -24,7 +24,6 @@ import { checkSkillForJob, heldAcrossRecords, jobDayLabel, matchTechnicians, min
 import { normalizeEndDate } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { validateValidity } from "@/lib/domain/validation";
-import { groupPersonRecords, personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
 import { formatDate } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
@@ -38,9 +37,9 @@ const ANY_LEVEL = "any";
 
 interface FindTechnicianProps {
   state: SkillDataState;
-  onOpen: (person: Person, definition: SkillDefinition) => void;
+  onOpen: (person: Person, definition: SkillDefinition, recordId?: string) => void;
   /** Shows all skills and certificates of one person, across all of their records. */
-  onOpenPerson: (person: Person, records: Person[]) => void;
+  onOpenPerson: (person: Person) => void;
 }
 
 /**
@@ -63,20 +62,14 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const dateError = jobDate ? validateValidity(jobDate, null) : t("find.enterJobDate");
 
   /**
-   * One row per person, not per record: a person's records (ERP user, Employee) are grouped by refId,
-   * and each skill counts with the best assignment across them. The matrix stays per record.
+   * One row per real person (the shared list from UnifiedPerson, see src/lib/domain/persons.ts); each
+   * skill counts with the best assignment across the person's Person records (ERP user, Employee).
    */
-  const people = useMemo(
-    () => groupPersonRecords(selectPersonRows(state.data?.persons ?? [], state.assignedPersonIds, false)),
-    [state.data, state.assignedPersonIds],
-  );
-  const holder = heldAcrossRecords(people, (recordId, skillId) => state.assignmentByCell.get(cellKey(recordId, skillId)), jobDate, today, minLevel);
+  const people = useMemo(() => (state.data?.persons ?? []).map((person) => ({ person, records: person.records })), [state.data]);
+  const holder = heldAcrossRecords(people, (recordId, skillId) => state.assignmentByRecord.get(cellKey(recordId, skillId)), jobDate, today, minLevel);
   const lookup = (personId: string, skillId: string) => holder(personId, skillId)?.held;
-  const recordsOf = (p: Person) => people.find((g) => g.person.id === p.id)?.records ?? [p];
-  const withoutJobTitle = useMemo(() => personsWithoutJobTitle(state.data?.persons ?? []), [state.data]);
-  const result = dateError
-    ? null
-    : matchTechnicians(people.map((g) => g.person), required, lookup, jobDate, today, minLevel, (p) => !withoutJobTitle.has(p.id));
+  /** People without a job title are not technicians: listed after them, and only if they hold a required skill. */
+  const result = dateError ? null : matchTechnicians(people.map((g) => g.person), required, lookup, jobDate, today, minLevel, (p) => Boolean(p.jobTitle));
 
   /** One cell: how this person's skill looks on the job date. Clicking it opens the record that holds it. */
   const skillCell = (person: Person, skill: SkillDefinition): ReactNode => {
@@ -91,7 +84,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
       <button
         type="button"
         className={styles.cell}
-        onClick={() => onOpen(holding?.record ?? person, skill)}
+        onClick={() => onOpen(person, skill, holding?.record.id)}
         title={check.reason ?? t("find.validOn", { skill: skill.name, date: formatDate(jobDate) })}
       >
         <span className={styles.status} style={{ color: display.color }}>
@@ -117,7 +110,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const personCell = (p: Person, technician: boolean) => (
     <TableCell>
       <span className={styles.person}>
-        <Link onClick={() => onOpenPerson(p, recordsOf(p))} accessibleName={t("person.allSkills", { name: p.name })} className={styles.personLink}>
+        <Link onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })} className={styles.personLink}>
           {p.name}
         </Link>
         <span className={styles.muted}>{p.jobTitle}</span>

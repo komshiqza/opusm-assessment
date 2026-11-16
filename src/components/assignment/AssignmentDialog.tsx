@@ -10,7 +10,7 @@ import { checkAssignmentCreated, deleteAssignment, updateAssignment } from "@/li
 import { createAssignmentWithCertificates, recheckUploads, retryItems, uploadCertificates } from "@/lib/skills/certificates";
 import { toUserMessage } from "@/lib/errors";
 import { FsmTimeoutError } from "@/lib/fsm/client";
-import { formatDate, formatFileSize, formatPersonType } from "@/lib/format";
+import { formatDate, formatFileSize, linkedRecordNote } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -27,13 +27,17 @@ interface AssignmentDialogProps {
   person: Person;
   definition: SkillDefinition;
   state: SkillDataState;
+  /** Open the assignment of exactly this Person record of the person; default: the one the matrix shows. */
+  recordId?: string;
   onClose: () => void;
 }
 
 /** Assign a skill, change level and validity, remove it, and manage its certificates. */
-export function AssignmentDialog({ person, definition, state, onClose }: AssignmentDialogProps) {
+export function AssignmentDialog({ person, definition, state, recordId, onClose }: AssignmentDialogProps) {
   const toast = useToast();
-  const listedAssignment = state.assignmentByCell.get(cellKey(person.id, definition.id));
+  const listedAssignment = recordId
+    ? state.assignmentByRecord.get(cellKey(recordId, definition.id))
+    : state.assignmentByCell.get(cellKey(person.id, definition.id));
   /** Set when this dialog removed the assignment; the list may still show it if the reload failed. */
   const [removed, setRemoved] = useState(false);
   const assignment = removed ? undefined : listedAssignment;
@@ -151,7 +155,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       setProgress("Assigning…");
       let result: Awaited<ReturnType<typeof createAssignmentWithCertificates>>;
       try {
-        result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress);
+        // Always on the person's main record; a skill on any of their records counts as "already has it".
+        const records = person.records.map((r) => r.id);
+        result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress, records);
       } catch (e) {
         // FSM did not answer the create: look once whether it arrived. Never created again by itself.
         if (e instanceof FsmTimeoutError && e.write) {
@@ -306,7 +312,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             <div className={styles.summary}>
               <Text>
                 <b>{person.name}</b>
-                {person.jobTitle || person.type ? ` · ${[person.jobTitle, formatPersonType(person.type)].filter(Boolean).join(" · ")}` : ""}
+                {[person.jobTitle, assignment ? linkedRecordNote(person, assignment.personId) : ""].filter(Boolean).map((part) => ` · ${part}`)}
               </Text>
               {assignment && (
                 <Text style={{ color: STATUS_DISPLAY[status].color, fontWeight: "bold" }}>

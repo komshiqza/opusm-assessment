@@ -65,6 +65,14 @@ describe("assign one skill to several persons", () => {
     expect(creates()).toEqual([people[1], people[2]]);
   });
 
+  it("skips a person whose linked (Employee) record already holds the skill, without a write", async () => {
+    const employeeRecord = "E".repeat(32);
+    alreadyHave = new Set([employeeRecord]);
+    const results = await bulkAssign(OWN_TAG, [people[0]], input, undefined, (id) => [id, employeeRecord]);
+    expect(results.map((r) => r.result)).toEqual(["skipped"]);
+    expect(creates()).toEqual([]);
+  });
+
   it(`refuses more than ${BULK_LIMIT} persons at once, before any write`, async () => {
     const many = Array.from({ length: BULK_LIMIT + 1 }, (_, i) => String(i).padStart(32, "0"));
     await expect(bulkAssign(OWN_TAG, many, input)).rejects.toThrow(/25/);

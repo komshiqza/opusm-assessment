@@ -1,14 +1,24 @@
 /** App-level models. The repository maps FSM responses into these; the UI only knows these. */
 
+/** One FSM Person record of a person (ERPUSER, EMPLOYEE or SALESEMPLOYEE). A skill belongs to one record. */
+export interface PersonRecord {
+  id: string;
+  type: string | null;
+}
+
+/**
+ * One real person (FSM UnifiedPerson), see src/lib/domain/persons.ts. `id` is the person's main Person
+ * record (ERPUSER, else the self-referencing one): new assignments always go there.
+ */
 export interface Person {
   id: string;
   /** "First Last", or the user name / a placeholder for technical persons without a name */
   name: string;
   jobTitle: string | null;
-  /** FSM person type, e.g. EMPLOYEE or ERPUSER */
-  type: string | null;
-  /** SAP links the records of one physical person through refId (= the ERPUSER record's id). */
-  refId: string | null;
+  /** SAP's key for all records of one human */
+  refId: string;
+  /** All Person records of this person, the main one first */
+  records: PersonRecord[];
 }
 
 /** A skill definition = FSM Tag in our namespace. */

@@ -11,16 +11,12 @@ import {
   MultiComboBox,
   MultiComboBoxItem,
   Option,
-  SegmentedButton,
-  SegmentedButtonItem,
   Select,
-  Text,
   ToggleButton,
 } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, type AssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
-import { formatPersonType } from "@/lib/format";
-import { personsWithoutJobTitle, recordsNeedingType, secondaryRecordIds, selectPersonRows } from "@/lib/domain/persons";
+import { alsoOnNote, linkedRecordNote } from "@/lib/format";
 import { knownSkillIds } from "@/lib/domain/skillFilter";
 import { NO_JOB_TITLE, jobTitleOptions, knownJobTitles } from "@/lib/domain/jobTitleFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
@@ -28,7 +24,7 @@ import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
-import { STATUS_DISPLAY, cellAction, compactStatusText, emptyCellLabel, statusText } from "./statusDisplay";
+import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
 import { filterMatrixRows } from "./matrixRows";
 import { t, tn } from "@/lib/i18n/t";
@@ -50,12 +46,11 @@ interface SkillMatrixProps {
 }
 
 export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }: SkillMatrixProps) {
-  const { data, assignmentByCell, certificatesBySkill } = state;
+  const { data, assignmentByCell, alsoOnByCell, certificatesBySkill } = state;
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
   const [jobTitles, setJobTitles] = usePageState<string[]>("matrix.jobTitles", []);
   const [statusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
-  const [showAllRecords, setShowAllRecords] = usePageState("matrix.showAllRecords", false);
   const today = useToday();
   const isPhone = useMediaQuery(PHONE_QUERY);
   /** Below 1280 px: icon plus short date, narrower columns (the phone has its own cards). */
@@ -72,7 +67,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     if (data && filterIds !== skillIds) setSkillIds(filterIds);
   }, [data, filterIds, skillIds, setSkillIds]);
 
-  /** Job titles of all loaded persons (the same values in both views); a title nobody has any more is dropped. */
+  /** Job titles of all loaded persons; a title nobody has any more is dropped. */
   const titleOptions = useMemo(() => jobTitleOptions(data?.persons ?? []), [data]);
   const titleFilter = knownJobTitles(jobTitles, titleOptions);
   useEffect(() => {
@@ -82,27 +77,10 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const statusOf = (personId: string, tagId: string) => getAssignmentStatus(assignmentByCell.get(cellKey(personId, tagId)), today);
 
   const query = personQuery.trim().toLowerCase();
-  /** One row per technician by default (see src/lib/domain/persons.ts). */
-  const technicianRows = useMemo(() => selectPersonRows(data?.persons ?? [], state.assignedPersonIds, false), [data, state.assignedPersonIds]);
-  const rows = showAllRecords ? (data?.persons ?? []) : technicianRows;
-  /** Shown because they hold our skills, but not technicians: labelled in the row (see persons.ts). */
-  const withoutJobTitle = useMemo(() => personsWithoutJobTitle(data?.persons ?? []), [data]);
-  /** Linked Employee records: new skills go on the person's main (ERP user) record. */
-  const secondary = useMemo(() => secondaryRecordIds(data?.persons ?? []), [data]);
-  const technicianCount = technicianRows.filter((p) => !withoutJobTitle.has(p.id)).length;
-  const extraCount = technicianRows.length - technicianCount;
+  /** One row per real person (FSM UnifiedPerson, see src/lib/domain/persons.ts). */
+  const rows = data?.persons ?? [];
   /** The rows shown; the CSV export and Bulk assign take exactly these. */
   const visiblePersons = filterMatrixRows(rows, { query, jobTitles: titleFilter, statusFilter, skills: visibleSkills, statusOf });
-
-  /** "ERP user" etc. only with "All person records", or where two records of one person are listed. */
-  const needsType = recordsNeedingType(visiblePersons);
-  const typeOf = (p: Person) => (showAllRecords || needsType.has(p.id) ? formatPersonType(p.type) : "");
-  /**
-   * The record type, and on a linked Employee row once, visibly, why its empty cells cannot be assigned.
-   * Mostly in "All person records"; an Employee record that already holds a skill is in the default view too.
-   */
-  const recordText = (p: Person) =>
-    secondary.has(p.id) ? [formatPersonType(p.type), t("matrix.mainRecordNote")].join(" · ") : typeOf(p);
 
   /** Counts over all rows and the visible skills (independent of the person and status filter). */
   const counts = { upcoming: 0, valid: 0, expiring: 0, expired: 0 };
@@ -127,6 +105,16 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
 
   const filtersActive = Boolean(query || titleFilter.length || filterIds.length || statusFilter !== "all");
 
+  /**
+   * Where a person's skill sits when not on their main record ("on Employee record"), and a second
+   * assignment of it on another record ("also on Employee record"; it opens from the person view).
+   */
+  const notesOf = (p: Person, tagId: string) => {
+    const assignment = assignmentByCell.get(cellKey(p.id, tagId));
+    const others = (alsoOnByCell.get(cellKey(p.id, tagId)) ?? []).map((a) => a.personId);
+    return [assignment ? linkedRecordNote(p, assignment.personId) : "", alsoOnNote(p, others)].filter(Boolean);
+  };
+
   /** Everything one cell (or one line of a phone card) shows. */
   const cellInfo = (p: Person, d: SkillDefinition) => {
     const assignment = assignmentByCell.get(cellKey(p.id, d.id));
@@ -134,17 +122,17 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     const certCount = assignment ? (certificatesBySkill.get(assignment.id)?.length ?? 0) : 0;
     const text = statusText(status, assignment);
     const shortText = compactStatusText(status, assignment);
-    const action = cellAction(Boolean(assignment), secondary.has(p.id));
+    const notes = notesOf(p, d.id);
     const label = assignment
       ? t("matrix.cellLabel", {
           person: p.name,
           skill: d.name,
-          status: text,
+          status: notes.length ? `${text} (${notes.join("; ")})` : text,
           level: assignment.proficiencyName ? t("matrix.cellLevel", { level: assignment.proficiencyName }) : "",
           certificates: certCount ? tn("matrix.cellCertificates", certCount) : t("matrix.cellNoCertificate"),
         })
-      : emptyCellLabel(p.name, d.name, action === "assignOnMain" ? "assignOnMain" : "assign");
-    return { assignment, action, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
+      : t("matrix.cellNotAssigned", { person: p.name, skill: d.name });
+    return { assignment, notes, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
   };
 
   /**
@@ -167,6 +155,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             </span>
           )}
         </span>
+        {info.notes.length > 0 && <span className={styles.recordNote}>{info.notes.join(" · ")}</span>}
       </>
     ) : (
       <span className={styles.empty}>
@@ -267,21 +256,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
         </span>
       </div>
 
-      {/* Table toolbar (Fiori: filters above, the table's own actions in its toolbar): who is in the table on the left, actions on the right. */}
+      {/* Table toolbar (Fiori: filters above, the table's own actions in its toolbar, on the right). */}
       <div className={styles.tableToolbar}>
-        {/* Fiori content switch: no visible label (the counters say what each view shows), but an accessible name. */}
-        <SegmentedButton
-          accessibleName={t("matrix.show")}
-          onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
-        >
-          <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
-            {extraCount ? t("matrix.techniciansPlus", { n: technicianCount, extra: extraCount }) : t("matrix.technicians", { n: technicianCount })}
-          </SegmentedButtonItem>
-          <SegmentedButtonItem data-key="all" selected={showAllRecords}>
-            {t("matrix.allRecords", { n: data.persons.length })}
-          </SegmentedButtonItem>
-        </SegmentedButton>
-        {showAllRecords && <Text className={styles.legend}>{t("matrix.allRecordsHint")}</Text>}
         <div className={styles.tableActions}>
           <Button design="Transparent" icon="add-employee" onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
             {t("matrix.bulk")}
@@ -296,7 +272,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
               downloadCsv(
                 matrixCsv(
                   visiblePersons,
-                  typeOf,
+                  (person, tagId) => notesOf(person, tagId).join("; "),
                   visibleSkills,
                   (personId, tagId) => assignmentByCell.get(cellKey(personId, tagId)),
                   (assignmentId) => certificatesBySkill.get(assignmentId)?.length ?? 0,
@@ -323,7 +299,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                 <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })}>
                   {p.name}
                 </Link>
-                <span className={styles.personMeta}>{[p.jobTitle, recordText(p)].filter(Boolean).join(" · ")}</span>
+                {p.jobTitle && <span className={styles.personMeta}>{p.jobTitle}</span>}
               </div>
               <ul className={styles.cardSkills}>
                 {visibleSkills
@@ -338,7 +314,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                     </li>
                   ))}
               </ul>
-              {!secondary.has(p.id) && visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
+              {visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
                 <div className={styles.cardMissing}>
                   <span className={styles.personMeta}>{t("matrix.notAssignedList")}</span>
                   {visibleSkills
@@ -387,39 +363,20 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                       <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })}>
                         {p.name}
                       </Link>
-                      <span className={styles.personMeta}>
-                        {/* The job title is hidden below 1024 px; the record type (when shown) keeps linked records apart. */}
-                        {p.jobTitle && (
-                          <span className={styles.jobTitle}>
-                            {p.jobTitle}
-                            {recordText(p) ? " · " : ""}
-                          </span>
-                        )}
-                        {recordText(p)}
-                      </span>
+                      {/* The job title is hidden below 1024 px. */}
+                      {p.jobTitle && (
+                        <span className={styles.personMeta}>
+                          <span className={styles.jobTitle}>{p.jobTitle}</span>
+                        </span>
+                      )}
                     </th>
                     {visibleSkills.map((d) => {
                       const info = cellInfo(p, d);
                       return (
                         <td key={d.id} className={styles.cell} data-status={info.status}>
-                          {info.action === "assignOnMain" ? (
-                            // A linked Employee record: no new skill here, so no action at all (Fiori: hide what can
-                            // never be enabled). The row says why, next to the record type. Existing skills open as usual.
-                            <span className={styles.cellLocked}>
-                              <span aria-hidden>–</span>
-                              <span className={styles.srOnly}>{info.label}</span>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className={styles.cellButton}
-                              onClick={() => onOpenCell(p, d)}
-                              aria-label={info.label}
-                              title={info.label}
-                            >
-                              {cellContent(info, isCompact)}
-                            </button>
-                          )}
+                          <button type="button" className={styles.cellButton} onClick={() => onOpenCell(p, d)} aria-label={info.label} title={info.label}>
+                            {cellContent(info, isCompact)}
+                          </button>
                         </td>
                       );
                     })}

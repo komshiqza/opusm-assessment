@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { OwnershipError } from "@/lib/fsm/guard";
-import { createAssignment, createSkillDefinition, deleteAssignment, deleteSkillDefinition, DeleteImpactChangedError, updateAssignment, updateSkillDefinition } from "./repository";
+import { AssignmentExistsError, createAssignment, createSkillDefinition, deleteAssignment, deleteSkillDefinition, DeleteImpactChangedError, updateAssignment, updateSkillDefinition } from "./repository";
 import { deleteCertificate, uploadCertificate } from "./certificates";
 import { installFakeFsm, fsm, writes, tagNamed, skillOfTag, pdf, NOTHING_CONFIRMED, DEMO_TAG, OWN_TAG, SKILL, ATTACHMENT, PERSON } from "./fakeFsm";
 
@@ -307,6 +307,21 @@ describe("own data", () => {
     await uploadCertificate(SKILL, pdf());
     const [upload] = writes();
     expect(upload).toMatchObject({ method: "POST", path: "data/v4/Attachment", body: { type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } });
+  });
+
+  it("does not create the skill on the main record when another record of the same person already holds it", async () => {
+    const EMPLOYEE_RECORD = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE1";
+    fsm.searchAnswer = (path, filter) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      const technician = filter.find((f) => f.field === "technicianId")?.value;
+      return path === "skill/v1/skills/search" && technician === EMPLOYEE_RECORD ? [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding", technicianId: EMPLOYEE_RECORD }] : [];
+    };
+    const input = { startDate: "2026-11-17", endDate: null, proficiencyId: null };
+    await expect(createAssignment(OWN_TAG, PERSON, input, [PERSON, EMPLOYEE_RECORD])).rejects.toBeInstanceOf(AssignmentExistsError);
+    expect(writes()).toEqual([]);
+    // Without the person's other records the check would miss it and create a second assignment.
+    await createAssignment(OWN_TAG, PERSON, input);
+    expect(writes().map((c) => (c.body as { technician: string }[])[0].technician)).toEqual([PERSON]);
   });
 
   it("rejects invalid dates before asking FSM anything", async () => {

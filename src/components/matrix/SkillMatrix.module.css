@@ -323,24 +323,11 @@
   color: var(--sapLinkColor);
 }
 
-/* Empty cell of a linked Employee record: plain "–", no action (the row says why). */
-.cellLocked {
-  display: grid;
-  align-items: center;
-  min-height: 2.75rem;
-  padding: 0.375rem 0.5rem;
+/* Where a person's skill sits when not on their main record ("on Employee record"). */
+.recordNote {
   font-size: var(--sapFontSmallSize);
   color: var(--sapContent_LabelColor);
-}
-
-/* Text for screen readers only. */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  font-style: italic;
 }
 
 .cellButton:hover .empty > :first-child,

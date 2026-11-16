@@ -18,8 +18,7 @@ import {
 } from "@ui5/webcomponents-react";
 import { addDays } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
-import { formatDate, formatPersonType } from "@/lib/format";
-import { recordsNeedingType } from "@/lib/domain/persons";
+import { formatDate, linkedRecordNote } from "@/lib/format";
 import { t, tn } from "@/lib/i18n/t";
 import { expiryStatus } from "./expiryStatus";
 import type { SkillDataState } from "@/hooks/useSkillData";
@@ -31,7 +30,7 @@ const WINDOWS = [30, 60, 90, 180, 365];
 
 interface ExpiryOverviewProps {
   state: SkillDataState;
-  onOpen: (person: Person, definition: SkillDefinition) => void;
+  onOpen: (person: Person, definition: SkillDefinition, recordId?: string) => void;
   /** Shows all skills and certificates of one person. */
   onOpenPerson: (person: Person) => void;
 }
@@ -44,20 +43,16 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
   const until = addDays(today, days);
 
   const rows = useMemo(() => {
-    const persons = new Map((state.data?.persons ?? []).map((p) => [p.id, p]));
     const definitions = new Map((state.data?.definitions ?? []).map((d) => [d.id, d]));
     return (state.data?.assignments ?? [])
       .filter((a) => a.endDate && a.endDate <= until && (includeExpired || a.endDate >= today))
       .flatMap((a) => {
-        const person = persons.get(a.personId);
+        const person = state.personOfRecord(a.personId); // undefined: no active person, not listed
         const definition = definitions.get(a.tagId);
         return person && definition ? [{ assignment: a, person, definition, endDate: a.endDate! }] : [];
       })
       .sort((x, y) => x.endDate.localeCompare(y.endDate) || x.person.name.localeCompare(y.person.name));
-  }, [state.data, until, today, includeExpired]);
-
-  /** "ERP user" etc. only where two records of one person are listed. */
-  const needsType = useMemo(() => recordsNeedingType(rows.map((r) => r.person)), [rows]);
+  }, [state, until, today, includeExpired]);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "0.75rem" }}>
@@ -100,7 +95,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
             return (
               <TableRow key={assignment.id} rowKey={assignment.id}>
                 <TableCell>
-                  <Link onClick={() => onOpen(person, definition)} accessibleName={t("expiry.open", { skill: definition.name, person: person.name })}>
+                  <Link onClick={() => onOpen(person, definition, assignment.personId)} accessibleName={t("expiry.open", { skill: definition.name, person: person.name })}>
                     {formatDate(endDate)}
                   </Link>
                 </TableCell>
@@ -117,7 +112,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
                     <Link onClick={() => onOpenPerson(person)} accessibleName={t("person.allSkills", { name: person.name })} style={{ fontWeight: "bold" }}>
                       {person.name}
                     </Link>
-                    {needsType.has(person.id) ? ` · ${formatPersonType(person.type)}` : ""}
+                    {linkedRecordNote(person, assignment.personId) ? ` · ${linkedRecordNote(person, assignment.personId)}` : ""}
                   </Text>
                 </TableCell>
                 <TableCell>

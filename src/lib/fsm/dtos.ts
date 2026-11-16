@@ -4,6 +4,7 @@
  */
 export const DTO = {
   Person: "Person.24",
+  UnifiedPerson: "UnifiedPerson.13",
   Tag: "Tag.10",
   Skill: "Skill.11",
   Attachment: "Attachment.19",

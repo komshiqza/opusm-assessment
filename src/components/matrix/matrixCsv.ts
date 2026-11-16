@@ -17,28 +17,30 @@ export function csvCell(value: string): string {
 
 /**
  * The matrix as CSV, exactly as shown: the given rows (current filters and "Show" choice) and the
- * given skill columns. The record column holds the type the screen shows (ERP user / Employee), so two
- * records of one person stay apart; it is always there, empty when the screen shows no type. Per skill: status, valid from, valid to, level and number of certificates.
+ * given skill columns. One row per person; a skill held on one of the person's linked records gets the
+ * same note as on screen in its status cell ("Valid (on Employee record)"). Per skill: status, valid from, valid to, level and number of certificates.
  * UTF-8 with BOM so Excel shows umlauts; dates as dd.mm.yyyy.
  */
 export function matrixCsv<P extends { id: string; name: string; jobTitle: string | null }>(
   persons: P[],
-  recordType: (person: P) => string,
+  /** "on Employee record" etc. for a person's skill, "" when it is on the main record */
+  recordNote: (person: P, skillId: string) => string,
   skills: { id: string; name: string }[],
   lookup: (personId: string, tagId: string) => Assignment | undefined,
   certificateCount: (assignmentId: string) => number,
   today: string,
 ): string {
   const columns = [t("common.status"), t("common.validFrom"), t("common.validTo"), t("common.level"), t("common.certificates")];
-  const header = [t("common.person"), t("csv.record"), t("csv.jobTitle"), ...skills.flatMap((s) => columns.map((column) => t("csv.column", { skill: s.name, column })))];
+  const header = [t("common.person"), t("csv.jobTitle"), ...skills.flatMap((s) => columns.map((column) => t("csv.column", { skill: s.name, column })))];
   const rows = persons.map((p) => [
     p.name,
-    recordType(p),
     p.jobTitle ?? "",
     ...skills.flatMap((s) => {
       const a = lookup(p.id, s.id);
       if (!a) return [STATUS_DISPLAY.none.label, "", "", "", ""];
-      return [STATUS_DISPLAY[getAssignmentStatus(a, today)].label, formatDate(a.startDate), formatDate(a.endDate), a.proficiencyName ?? "", String(certificateCount(a.id))];
+      const note = recordNote(p, s.id);
+      const status = STATUS_DISPLAY[getAssignmentStatus(a, today)].label;
+      return [note ? `${status} (${note})` : status, formatDate(a.startDate), formatDate(a.endDate), a.proficiencyName ?? "", String(certificateCount(a.id))];
     }),
   ]);
   return "﻿" + [header, ...rows].map((cells) => cells.map(csvCell).join(SEPARATOR)).join("\r\n");

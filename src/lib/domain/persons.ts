@@ -1,107 +1,80 @@
 /**
- * Which person records the matrix shows by default: one row per physical person.
+ * One row per real person, the way SAP does it with UnifiedPerson.
  *
- * SAP documents this in the Person DTO (v23): "A physical person can have up to 3 different
- * entries" (ERPUSER, EMPLOYEE, SALESEMPLOYEE). "They are linked through the refId property", which
- * equals the ERPUSER id, and "that person is actually the one of type ERPUSER".
- * https://help.sap.com/docs/SAP_FIELD_SERVICE_MANAGEMENT/fsm_data_model/persondto_v23.html
+ * SAP: one human can have up to three Person records (ERPUSER, EMPLOYEE, SALESEMPLOYEE); UnifiedPerson
+ * "unif[ies]/combine[s] all two/three records for an entity into a single, unified record", and the
+ * guarantee is that refId is identical for all Person and UnifiedPerson records of one human. SAP warns
+ * not to rely on Person[ERPUSER].id = UnifiedPerson.id, so records are matched by refId only.
+ * https://help.sap.com/docs/SAP_FIELD_SERVICE_MANAGEMENT/fsm_data_model/person-unifiedperson.html
  *
- * So: group the records by refId and show the ERPUSER record of each group in which any record has
- * a job title (people without one, like OPUSm staff or "admin", are not technicians). A record that
- * holds one of our skills is always shown, so no assignment can disappear. Records are never
- * merged: a skill belongs to one specific person id.
+ * A skill (FSM Skill) belongs to one Person record. The person's main record (ERPUSER, else the record
+ * that references itself) is the person's id in this app, so new assignments always go there.
  */
+import type { Assignment, Person, PersonRecord } from "@/lib/skills/types";
 
-interface PersonRecord {
+export interface UnifiedPersonRow {
   id: string;
-  type: string | null;
-  refId?: string | null;
+  refId: string | null;
+  name: string;
   jobTitle: string | null;
+  inactive?: boolean;
 }
 
-/** The physical person a record belongs to (SAP: refId = ERPUSER id; missing refId = its own id). */
-function physicalPersonKey(p: PersonRecord): string {
-  return p.refId || p.id;
+export interface PersonRecordRow extends PersonRecord {
+  refId: string | null;
 }
 
-function groupByPhysicalPerson<P extends PersonRecord>(persons: P[]): P[][] {
-  const groups = new Map<string, P[]>();
-  for (const p of persons) groups.set(physicalPersonKey(p), [...(groups.get(physicalPersonKey(p)) ?? []), p]);
-  return [...groups.values()];
+/** `${personId}|${tagId}`: one cell of the matrix (person = the main record's id). */
+export const cellKey = (personId: string, tagId: string) => `${personId}|${tagId}`;
+
+/** The main record: ERPUSER, else the one that references itself, else the first. */
+function mainRecord(records: PersonRecordRow[], refId: string): PersonRecordRow {
+  return records.find((r) => r.type === "ERPUSER") ?? records.find((r) => r.id === refId) ?? records[0];
 }
 
-export function countPhysicalPersons(persons: PersonRecord[]): number {
-  return groupByPhysicalPerson(persons).length;
-}
-
-/** The record that stands for the person: the ERPUSER record the others point to. */
-function mainRecord<P extends PersonRecord>(group: P[]): P {
-  return group.find((p) => p.type === "ERPUSER" && p.id === physicalPersonKey(p)) ?? group.find((p) => p.type === "ERPUSER") ?? group[0];
-}
-
-export function selectPersonRows<P extends PersonRecord>(persons: P[], personIdsWithAssignments: Set<string>, showAll: boolean): P[] {
-  if (showAll) return persons;
-  const shown = new Set<string>();
-  for (const group of groupByPhysicalPerson(persons)) {
-    if (!group.some((p) => p.jobTitle?.trim())) continue;
-    shown.add(mainRecord(group).id);
+/** Active UnifiedPerson rows with their Person records (by refId), main record first, sorted by name. */
+export function buildPeople(unified: UnifiedPersonRow[], records: PersonRecordRow[]): Person[] {
+  const byRefId = new Map<string, PersonRecordRow[]>();
+  for (const r of records) if (r.refId) byRefId.set(r.refId, [...(byRefId.get(r.refId) ?? []), r]);
+  const people: Person[] = [];
+  for (const u of unified) {
+    if (u.inactive) continue;
+    const refId = u.refId ?? u.id;
+    const own = byRefId.get(refId) ?? [];
+    if (own.length === 0) continue; // nothing could be shown or written for this person
+    const main = mainRecord(own, refId);
+    const ordered = [main, ...own.filter((r) => r !== main)].map(({ id, type }) => ({ id, type }));
+    people.push({ id: main.id, name: u.name, jobTitle: u.jobTitle?.trim() || null, refId, records: ordered });
   }
-  for (const p of persons) if (personIdsWithAssignments.has(p.id)) shown.add(p.id);
-  return persons.filter((p) => shown.has(p.id));
+  return people.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * One entry per physical person, for "Find technician" (which asks about people, not records): the
- * main record stands for the person, `records` are all of the person's given records, the main one first.
- */
-export function groupPersonRecords<P extends PersonRecord>(rows: P[]): { person: P; records: P[] }[] {
-  return groupByPhysicalPerson(rows).map((group) => {
-    const person = mainRecord(group);
-    return { person, records: [person, ...group.filter((p) => p !== person)] };
-  });
+export interface PlacedAssignments {
+  /** cellKey(person, tag) → the assignment shown: the main record's, else the one on a linked record */
+  byCell: Map<string, Assignment>;
+  /** cellKey(person, tag) → further assignments of the same skill on the person's other records */
+  alsoOn: Map<string, Assignment[]>;
+  /** The person a Person record belongs to (undefined: no active person, the assignment is not shown) */
+  ownerOf: (recordId: string) => Person | undefined;
 }
 
-/**
- * Records of people without a job title on any of their linked records (e.g. OPUSm staff accounts).
- * They are not technicians, but if they hold one of our skills they stay visible, clearly labelled:
- * the brief asks "which person has which skill", and in an emergency such a person may matter.
- */
-export function personsWithoutJobTitle(persons: PersonRecord[]): Set<string> {
-  const ids = new Set<string>();
-  for (const group of groupByPhysicalPerson(persons)) {
-    if (group.some((p) => p.jobTitle?.trim())) continue;
-    for (const p of group) ids.add(p.id);
+/** Puts each assignment into its person's cell; one whose record belongs to no active person is left out. */
+export function placeAssignments<A extends Pick<Assignment, "id" | "personId" | "tagId">>(
+  people: Person[],
+  assignments: A[],
+): Omit<PlacedAssignments, "byCell" | "alsoOn"> & { byCell: Map<string, A>; alsoOn: Map<string, A[]> } {
+  const owner = new Map<string, Person>();
+  for (const p of people) for (const r of p.records) owner.set(r.id, p);
+  const byCell = new Map<string, A>();
+  const alsoOn = new Map<string, A[]>();
+  // Main-record assignments first, so they win the cell.
+  const ordered = [...assignments].sort((x, y) => Number(owner.get(y.personId)?.id === y.personId) - Number(owner.get(x.personId)?.id === x.personId));
+  for (const a of ordered) {
+    const person = owner.get(a.personId);
+    if (!person) continue;
+    const key = cellKey(person.id, a.tagId);
+    if (byCell.has(key)) alsoOn.set(key, [...(alsoOn.get(key) ?? []), a]);
+    else byCell.set(key, a);
   }
-  return ids;
-}
-
-/**
- * Secondary records: an EMPLOYEE or SALESEMPLOYEE record whose refId points to a loaded ERPUSER
- * record (another record than itself). New skills go only on a person's main record, so one person's
- * skills are not split over two records; existing skills on a secondary record stay fully usable.
- * Not secondary: every ERPUSER record (also without a job title), and a record without a loaded
- * ERPUSER behind it (no refId, refId to itself, or refId to a record that is not loaded): it is that
- * person's only record. A UX rule of this app, not a rule of the shared company.
- */
-export function secondaryRecordIds(persons: PersonRecord[]): Set<string> {
-  const erpUsers = new Set(persons.filter((p) => p.type === "ERPUSER").map((p) => p.id));
-  return new Set(
-    persons
-      .filter((p) => (p.type === "EMPLOYEE" || p.type === "SALESEMPLOYEE") && p.refId && p.refId !== p.id && erpUsers.has(p.refId))
-      .map((p) => p.id),
-  );
-}
-
-/**
- * Records whose type ("ERP user", "Employee") must be shown: only where two different records of the
- * same person are on screen, which would otherwise look identical. With one row per person the type
- * is technical noise. A record listed several times (one row per assignment) counts once.
- */
-export function recordsNeedingType(rows: PersonRecord[]): Set<string> {
-  const recordsPerPerson = new Map<string, Set<string>>();
-  for (const p of rows) {
-    const key = physicalPersonKey(p);
-    recordsPerPerson.set(key, (recordsPerPerson.get(key) ?? new Set()).add(p.id));
-  }
-  return new Set([...recordsPerPerson.values()].filter((ids) => ids.size > 1).flatMap((ids) => [...ids]));
+  return { byCell, alsoOn, ownerOf: (recordId) => owner.get(recordId) };
 }

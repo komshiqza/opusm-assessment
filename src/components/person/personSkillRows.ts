@@ -9,8 +9,6 @@ export interface PersonSkillRow<D> {
   certificates: Certificate[];
   /** The person record that holds this assignment (or, if none does, the first record): edits and assigns go there. */
   holderId: string;
-  /** The same skill is held by another of the person's records too (each assignment is its own row). */
-  heldTwice: boolean;
 }
 
 /**
@@ -33,7 +31,6 @@ export function personSkillRows<D extends { id: string }>(
       return {
         definition,
         holderId,
-        heldTwice: holders.length > 1,
         assignment,
         status: getAssignmentStatus(assignment, today),
         certificates: assignment ? (certificatesBySkill.get(assignment.id) ?? []) : [],

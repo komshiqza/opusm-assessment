@@ -1,113 +1,84 @@
 import { describe, expect, it } from "vitest";
-import { countPhysicalPersons, personsWithoutJobTitle, recordsNeedingType, secondaryRecordIds, selectPersonRows } from "./persons";
+import { buildPeople, placeAssignments } from "./persons";
 
-/** Records as SAP links them: every record's refId is the id of the ERPUSER record (which references itself). */
-const record = (id: string, type: string, refId: string, jobTitle: string | null = "Service Technician") => ({ id, type, refId, jobTitle });
-
-// Marco: two linked records (as in the demo company)
-const marcoErp = record("marco", "ERPUSER", "marco");
-const marcoEmployee = record("marco-emp", "EMPLOYEE", "marco");
-// Anna: three linked records (ERPUSER, EMPLOYEE, SALESEMPLOYEE)
-const annaErp = record("anna", "ERPUSER", "anna");
-const annaEmployee = record("anna-emp", "EMPLOYEE", "anna");
-const annaSales = record("anna-sales", "SALESEMPLOYEE", "anna");
-// Lukas: a technician without any of our skills, only the ERPUSER record
-const lukasErp = record("lukas", "ERPUSER", "lukas");
-// Dominic: no job title on any record (not a technician)
-const dominicErp = record("dominic", "ERPUSER", "dominic", null);
-const dominicEmployee = record("dominic-emp", "EMPLOYEE", "dominic", null);
-// Eva: only the EMPLOYEE record carries the job title
-const evaErp = record("eva", "ERPUSER", "eva", null);
-const evaEmployee = record("eva-emp", "EMPLOYEE", "eva");
-
-const all = [marcoErp, marcoEmployee, annaErp, annaEmployee, annaSales, lukasErp, dominicErp, dominicEmployee, evaErp, evaEmployee];
-
-describe("selectPersonRows (SAP: records linked by refId; the person is the ERPUSER record)", () => {
-  it("shows one row per technician: the ERPUSER record of each linked group with a job title", () => {
-    expect(selectPersonRows(all, new Set(), false).map((p) => p.id)).toEqual(["marco", "anna", "lukas", "eva"]);
-  });
-
-  it("shows a technician who has none of our skills", () => {
-    expect(selectPersonRows([lukasErp], new Set(), false)).toEqual([lukasErp]);
-  });
-
-  it("hides people without a job title on any record", () => {
-    expect(selectPersonRows([dominicErp, dominicEmployee], new Set(), false)).toEqual([]);
-  });
-
-  it("never hides a record that holds one of our skills", () => {
-    const rows = selectPersonRows(all, new Set(["anna-sales", "dominic-emp"]), false).map((p) => p.id);
-    expect(rows).toEqual(["marco", "anna", "anna-sales", "lukas", "dominic-emp", "eva"]);
-  });
-
-  it("falls back to the first record when a group has no ERPUSER record", () => {
-    const orphan = record("x-emp", "EMPLOYEE", "x");
-    expect(selectPersonRows([orphan], new Set(), false)).toEqual([orphan]);
-  });
-
-  it("shows every record when asked", () => {
-    expect(selectPersonRows(all, new Set(), true)).toEqual(all);
-  });
+/**
+ * One row per real person, as SAP's UnifiedPerson does it: the Person records of one human share the
+ * same refId (SAP's guaranteed key), so assignments are mapped by refId, not by assuming
+ * UnifiedPerson.id = ERPUSER id. https://help.sap.com/docs/SAP_FIELD_SERVICE_MANAGEMENT/fsm_data_model/person-unifiedperson.html
+ */
+const unified = (id: string, refId: string, name: string, jobTitle: string | null = "Service Technician", inactive = false) => ({
+  id,
+  refId,
+  name,
+  jobTitle,
+  inactive,
 });
+const record = (id: string, refId: string | null, type: string) => ({ id, refId, type });
 
-describe("countPhysicalPersons", () => {
-  it("counts linked groups, not records", () => {
-    expect(countPhysicalPersons(all)).toBe(5);
+// Anna: ERPUSER + EMPLOYEE (as in the demo company). UnifiedPerson id deliberately differs from the ERPUSER id.
+const anna = unified("U-ANNA", "anna", "Anna Schneider");
+const annaRecords = [record("anna-emp", "anna", "EMPLOYEE"), record("anna", "anna", "ERPUSER")];
+// Eli: EMPLOYEE only, references itself.
+const eli = unified("U-ELI", "eli", "Eli Brand", "Electrician");
+const eliRecords = [record("eli", "eli", "EMPLOYEE")];
+// Sam: ERPUSER + SALESEMPLOYEE.
+const sam = unified("U-SAM", "sam", "Sam Roth", null);
+const samRecords = [record("sam", "sam", "ERPUSER"), record("sam-sales", "sam", "SALESEMPLOYEE")];
+// Ina: inactive in UnifiedPerson.
+const ina = unified("U-INA", "ina", "Ina Alt", "Service Technician", true);
+const inaRecords = [record("ina", "ina", "ERPUSER")];
+
+const people = buildPeople([anna, eli, sam, ina], [...annaRecords, ...eliRecords, ...samRecords, ...inaRecords]);
+const byName = (name: string) => people.find((p) => p.name === name)!;
+
+describe("buildPeople (one row per real person, from UnifiedPerson)", () => {
+  it("lists active people only, sorted by name", () => {
+    expect(people.map((p) => p.name)).toEqual(["Anna Schneider", "Eli Brand", "Sam Roth"]);
   });
-});
-
-describe("personsWithoutJobTitle", () => {
-  it("marks every record of a person whose linked records have no job title", () => {
-    expect([...personsWithoutJobTitle(all)].sort()).toEqual(["dominic", "dominic-emp"]);
-  });
-
-  it("does not mark a person whose job title sits on another linked record", () => {
-    expect(personsWithoutJobTitle(all).has("eva")).toBe(false);
-  });
-});
-
-describe("recordsNeedingType (\"ERP user\" etc. only where it tells rows apart)", () => {
-  it("shows no record type when every person has one row", () => {
-    expect(recordsNeedingType([marcoErp, annaErp, lukasErp])).toEqual(new Set());
-  });
-
-  it("shows the record type on two rows of the same person", () => {
-    expect(recordsNeedingType([marcoErp, annaErp, annaSales])).toEqual(new Set(["anna", "anna-sales"]));
-  });
-
-  it("does not count the same record twice (e.g. one row per assignment in the expiry list)", () => {
-    expect(recordsNeedingType([annaErp, annaErp, marcoErp])).toEqual(new Set());
-  });
-});
-
-describe("secondaryRecordIds (new skills only on a person's main record)", () => {
-  const plain = (id: string, type: string, refId: string | null) => ({ id, type, refId, jobTitle: "Service Technician" });
-  const loaded = [
-    plain("U", "ERPUSER", "U"),
-    plain("E", "EMPLOYEE", "U"), // linked to a loaded ERPUSER
-    plain("S", "SALESEMPLOYEE", "U"), // linked to a loaded ERPUSER
-    plain("SELF", "EMPLOYEE", "SELF"), // refId to itself: its own person
-    plain("NOREF", "EMPLOYEE", null), // no refId: its own person
-    plain("LOST", "EMPLOYEE", "NOT-LOADED"), // refId to a person that is not loaded
-    plain("TOEMP", "EMPLOYEE", "SELF"), // refId to a record that is not an ERPUSER
-    { id: "ADMIN", type: "ERPUSER", refId: "ADMIN", jobTitle: null }, // ERPUSER without a job title
-  ];
-  const secondary = secondaryRecordIds(loaded);
 
   it.each([
-    ["U", false, "an ERPUSER record"],
-    ["E", true, "an EMPLOYEE linked to a loaded ERPUSER"],
-    ["S", true, "a SALESEMPLOYEE linked to a loaded ERPUSER"],
-    ["SELF", false, "an EMPLOYEE whose refId is itself"],
-    ["NOREF", false, "an EMPLOYEE without a refId"],
-    ["LOST", false, "an EMPLOYEE whose refId is not loaded"],
-    ["TOEMP", false, "an EMPLOYEE whose refId is not an ERPUSER"],
-    ["ADMIN", false, "an ERPUSER without a job title"],
-  ] as const)("%s → secondary %s (%s)", (id, expected, _why) => {
-    expect(secondary.has(id)).toBe(expected);
+    ["Anna Schneider", "anna", ["anna", "anna-emp"], "ERPUSER + EMPLOYEE: the ERPUSER record is the main one (listed first)"],
+    ["Eli Brand", "eli", ["eli"], "EMPLOYEE only: the record that references itself is the main one"],
+    ["Sam Roth", "sam", ["sam", "sam-sales"], "ERPUSER + SALESEMPLOYEE: linked by refId"],
+  ] as const)("%s → main record %s, records %j (%s)", (name, mainId, recordIds, _why) => {
+    const person = byName(name);
+    expect(person.id).toBe(mainId); // new assignments go to this record
+    expect(person.records.map((r) => r.id)).toEqual(recordIds);
   });
 
-  it("works on the demo company's pairs", () => {
-    expect([...secondaryRecordIds(all)].sort()).toEqual(["anna-emp", "anna-sales", "dominic-emp", "eva-emp", "marco-emp"]);
+  it("maps by refId, not by UnifiedPerson.id = ERPUSER id", () => {
+    expect(byName("Anna Schneider").id).not.toBe(anna.id);
+  });
+
+  it("leaves out a person without any active Person record (nothing could be shown or written)", () => {
+    expect(buildPeople([unified("U-X", "x", "Xaver")], [])).toEqual([]);
+  });
+});
+
+describe("placeAssignments (each assignment in its person's cell)", () => {
+  const a = (id: string, personId: string, tagId = "AID") => ({ id, personId, tagId });
+
+  it.each([
+    [[a("S1", "anna")], "anna", "S1", [], "skill on the main record"],
+    [[a("S1", "anna-emp")], "anna", "S1", [], "skill only on the EMPLOYEE record: shown in her row"],
+    [[a("S2", "anna-emp"), a("S1", "anna")], "anna", "S1", ["S2"], "same skill on both: the main record's is shown, the other is noted"],
+    [[a("S1", "eli")], "eli", "S1", [], "EMPLOYEE-only person"],
+    [[a("S1", "sam-sales")], "sam", "S1", [], "skill on a SALESEMPLOYEE record"],
+  ] as const)("%j → cell %s shows %s, also %j (%s)", (assignments, personId, shown, also, _why) => {
+    const cells = placeAssignments(people, [...assignments]);
+    expect(cells.byCell.get(`${personId}|AID`)?.id).toBe(shown);
+    expect((cells.alsoOn.get(`${personId}|AID`) ?? []).map((x) => x.id)).toEqual(also);
+  });
+
+  it("does not show an assignment whose technician is in no active person (inactive or unknown)", () => {
+    const cells = placeAssignments(people, [a("S9", "ina"), a("S8", "nobody")]);
+    expect(cells.byCell.size).toBe(0);
+    expect(cells.ownerOf("ina")).toBeUndefined();
+  });
+
+  it("knows the person of every record, for the assignment's own record", () => {
+    const cells = placeAssignments(people, []);
+    expect(cells.ownerOf("anna-emp")?.id).toBe("anna");
+    expect(cells.ownerOf("sam-sales")?.id).toBe("sam");
   });
 });

@@ -73,13 +73,13 @@ export function jobDayLabel(
  * of them, with the record that holds it (a click opens that record). Best: one that counts for the
  * job; otherwise the one closest to counting (later end date, then higher level).
  */
-export function heldAcrossRecords<P extends { id: string }, H extends HeldSkill>(
-  groups: { person: P; records: P[] }[],
+export function heldAcrossRecords<P extends { id: string }, R extends { id: string }, H extends HeldSkill>(
+  groups: { person: P; records: R[] }[],
   lookup: (recordId: string, skillId: string) => H | undefined,
   jobDate: string,
   today: string,
   minLevel: { level: number; name: string } | null,
-): (personId: string, skillId: string) => { record: P; held: H } | undefined {
+): (personId: string, skillId: string) => { record: R; held: H } | undefined {
   const recordsOf = new Map(groups.map((g) => [g.person.id, g.records]));
   return (personId, skillId) => {
     const candidates = (recordsOf.get(personId) ?? []).flatMap((record) => {
