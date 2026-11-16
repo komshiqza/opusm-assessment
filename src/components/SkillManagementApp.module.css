@@ -34,3 +34,19 @@
     padding-inline: 0.5rem;
   }
 }
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--sapFontBoldFamily);
+  font-size: var(--sapFontHeader5Size);
+  color: var(--sapShell_TextColor);
+  white-space: nowrap;
+}
+
+.logoIcon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--sapShell_InteractiveTextColor);
+}

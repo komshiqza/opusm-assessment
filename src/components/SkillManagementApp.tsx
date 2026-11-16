@@ -1,7 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { BusyIndicator, Button, IllustratedMessage, MessageStrip, ShellBar, Tab, TabContainer } from "@ui5/webcomponents-react";
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  BusyIndicator,
+  Button,
+  Icon,
+  IllustratedMessage,
+  MessageStrip,
+  ShellBar,
+  ShellBarBranding,
+  Tab,
+  TabContainer,
+} from "@ui5/webcomponents-react";
+import {
+  isDefaultTabOrder,
+  moveTab,
+  parseTabOrder,
+  readStoredTabOrder,
+  resetTabOrder,
+  saveTabOrder,
+  subscribeTabOrder,
+  type TabKey,
+} from "@/lib/tabOrder";
+import { PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { CANDIDATE_ID_VALID, NAME_PREFIX } from "@/lib/candidate";
 import { useSkillData } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
@@ -13,16 +34,50 @@ import { ExpiryOverview } from "./expiry/ExpiryOverview";
 import { FindTechnician } from "./findTechnician/FindTechnician";
 import styles from "./SkillManagementApp.module.css";
 
-type TabKey = "matrix" | "find" | "expiry" | "catalogue";
+/** Tab labels; phones get short ones so all four tabs fit next to each other. */
+const TAB_LABELS: Record<TabKey, { full: string; short: string }> = {
+  matrix: { full: "Skill matrix", short: "Matrix" },
+  expiry: { full: "Expiring soon", short: "Expiring" },
+  find: { full: "Find technician for a job", short: "Find" },
+  catalogue: { full: "Skill catalogue", short: "Skills" },
+};
+
+const tabKeyOf = (element: HTMLElement | undefined) => element?.dataset.key as TabKey | undefined;
 
 export function SkillManagementApp() {
   const state = useSkillData();
   const [tab, setTab] = useState<TabKey>("matrix");
   const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition } | null>(null);
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
+  const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
+  const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
+
+  const content: Record<TabKey, ReactNode> = {
+    matrix: <SkillMatrix state={state} onOpenCell={openCell} onGoToCatalogue={() => setTab("catalogue")} />,
+    expiry: <ExpiryOverview state={state} onOpen={openCell} />,
+    find: <FindTechnician state={state} onOpen={openCell} />,
+    catalogue: <SkillCatalog state={state} />,
+  };
 
   return (
     <ToastProvider>
-      <ShellBar primaryTitle="Skill Management" secondaryTitle="Service technicians on SAP FSM" />
+      <ShellBar
+        branding={
+          <ShellBarBranding
+            // UI5 shows only the logo on phones, so the phone gets the title inside the logo.
+            logo={
+              <span slot="logo" className={styles.logo}>
+                <Icon name="competence" className={styles.logoIcon} />
+                {isPhone && <span>Skill Management</span>}
+              </span>
+            }
+          >
+            Skill Management
+          </ShellBarBranding>
+        }
+        secondaryTitle="Service technicians on SAP FSM"
+      />
       <main className={styles.main}>
         {!CANDIDATE_ID_VALID && (
           <MessageStrip design="Negative" hideCloseButton>
@@ -55,30 +110,45 @@ export function SkillManagementApp() {
           <>
             <BusyIndicator active={state.refreshing} delay={300} className={styles.content}>
               <TabContainer
+                // UI5 does not redraw its tab strip when tabs are reordered, so a new order mounts a new container.
+                key={order.join()}
                 className={styles.tabs}
                 contentBackgroundDesign="Transparent"
-                onTabSelect={(e) => setTab((e.detail.tab.dataset.key as TabKey) ?? "matrix")}
+                onTabSelect={(e) => setTab(tabKeyOf(e.detail.tab) ?? "matrix")}
+                // Drag a tab (or Ctrl + arrow keys) to reorder: UI5 asks with move-over, then reports the drop with move.
+                onMoveOver={(e) => {
+                  const { source, destination } = e.detail;
+                  if (tabKeyOf(source.element) && tabKeyOf(destination.element) && destination.placement !== "On") e.preventDefault();
+                }}
+                onMove={(e) => {
+                  const source = tabKeyOf(e.detail.source.element);
+                  const target = tabKeyOf(e.detail.destination.element);
+                  const placement = e.detail.destination.placement;
+                  if (source && target && placement !== "On") saveTabOrder(moveTab(order, source, target, placement));
+                }}
               >
-                <Tab text="Skill matrix" data-key="matrix" selected={tab === "matrix"}>
-                  <SkillMatrix
-                    state={state}
-                    onOpenCell={(person, definition) => setCell({ person, definition })}
-                    onGoToCatalogue={() => setTab("catalogue")}
-                  />
-                </Tab>
-                <Tab text="Find technician for a job" data-key="find" selected={tab === "find"}>
-                  <FindTechnician state={state} onOpen={(person, definition) => setCell({ person, definition })} />
-                </Tab>
-                <Tab text="Expiry overview" data-key="expiry" selected={tab === "expiry"}>
-                  <ExpiryOverview state={state} onOpen={(person, definition) => setCell({ person, definition })} />
-                </Tab>
-                <Tab text={`Skill catalogue (${state.data.definitions.length})`} data-key="catalogue" selected={tab === "catalogue"}>
-                  <SkillCatalog state={state} />
-                </Tab>
+                {order.map((key) => (
+                  <Tab
+                    key={key}
+                    data-key={key}
+                    movable
+                    selected={tab === key}
+                    text={`${isPhone ? TAB_LABELS[key].short : TAB_LABELS[key].full}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
+                  >
+                    {content[key]}
+                  </Tab>
+                ))}
               </TabContainer>
             </BusyIndicator>
             <p className={styles.footnote}>
-              Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data. The matrix shows one row per active technician unless “Show all person records” is on.
+              Tip: drag a tab to change the order (saved in this browser only).{" "}
+              {!isDefaultTabOrder(order) && (
+                <Button design="Transparent" icon="reset" onClick={resetTabOrder}>
+                  Reset tab order
+                </Button>
+              )}
+              <br />
+              Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data from FSM.
             </p>
           </>
         )}

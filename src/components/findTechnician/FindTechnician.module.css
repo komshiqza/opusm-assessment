@@ -1,11 +1,13 @@
 .wrapper {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* lets the tables shrink, so UI5 can fold columns into rows */
   gap: 1rem;
   min-width: 0;
 }
 
 .panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
   padding-bottom: 0.5rem;
   border: 1px solid var(--sapList_BorderColor);

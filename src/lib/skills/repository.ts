@@ -29,8 +29,8 @@ const IN_CHUNK = 100;
 // --- Reads ------------------------------------------------------------------------
 
 export async function loadPersons(): Promise<Person[]> {
-  const rows = await fsmQuery<{ p: FsmPerson & { userName?: string | null } }>(
-    "SELECT p.id, p.firstName, p.lastName, p.jobTitle, p.type, p.userName FROM Person p WHERE p.inactive = false",
+  const rows = await fsmQuery<{ p: FsmPerson & { userName?: string | null; refId?: string | null } }>(
+    "SELECT p.id, p.refId, p.firstName, p.lastName, p.jobTitle, p.type, p.userName FROM Person p WHERE p.inactive = false",
     ["Person"],
   );
   return rows
@@ -39,6 +39,7 @@ export async function loadPersons(): Promise<Person[]> {
       name: [p.firstName, p.lastName].filter(Boolean).join(" ") || p.userName || "Unnamed person",
       jobTitle: p.jobTitle ?? null,
       type: p.type ?? null,
+      refId: p.refId ?? null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name) || (a.type ?? "").localeCompare(b.type ?? ""));
 }

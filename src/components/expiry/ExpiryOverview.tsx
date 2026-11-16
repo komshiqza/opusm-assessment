@@ -50,7 +50,7 @@ export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
   }, [state.data, until, today, includeExpired]);
 
   return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "0.75rem" }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "0.75rem 1.5rem" }}>
         <div style={{ display: "grid", gap: "0.25rem" }}>
           <Label for="expiry-window">Ends within</Label>

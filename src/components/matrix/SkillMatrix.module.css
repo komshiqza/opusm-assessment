@@ -1,5 +1,6 @@
 .wrapper {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   min-width: 0;
 }
@@ -236,4 +237,92 @@
 .cellButton:hover .assignHint,
 .cellButton:focus-visible .assignHint {
   display: inline-flex;
+}
+
+.showRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+/* Phone: one card per person with the skills stacked */
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.card {
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: var(--sapElement_BorderCornerRadius);
+  background: var(--sapList_Background);
+  overflow: hidden;
+}
+
+.cardHead {
+  padding: 0.5rem 0.75rem;
+  background: var(--sapList_HeaderBackground);
+  border-bottom: 1px solid var(--sapList_BorderColor);
+}
+
+.cardSkills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cardSkill + .cardSkill {
+  border-top: 1px solid var(--sapList_BorderColor);
+}
+
+.cardSkill[data-status="expiring"] {
+  box-shadow: inset 3px 0 0 var(--sapCriticalColor);
+}
+
+.cardSkill[data-status="expired"] {
+  box-shadow: inset 3px 0 0 var(--sapNegativeColor);
+}
+
+.cardSkill[data-status="valid"] {
+  box-shadow: inset 3px 0 0 var(--sapPositiveColor);
+}
+
+.cardSkill[data-status="upcoming"] {
+  box-shadow: inset 3px 0 0 var(--sapNeutralColor);
+}
+
+.cardSkillName {
+  font-size: var(--sapFontSize);
+  color: var(--sapTextColor);
+}
+
+.cardMissing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--sapList_BorderColor);
+}
+
+.assignChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--sapButton_BorderColor);
+  border-radius: 1rem;
+  background: var(--sapButton_Background);
+  color: var(--sapButton_TextColor);
+  font: inherit;
+  font-size: var(--sapFontSmallSize);
+  cursor: pointer;
+}
+
+.assignChip:focus-visible {
+  outline: var(--sapContent_FocusWidth) var(--sapContent_FocusStyle) var(--sapContent_FocusColor);
 }

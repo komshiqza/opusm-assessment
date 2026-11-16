@@ -1,35 +1,57 @@
 import { describe, expect, it } from "vitest";
-import { isTechnicianRecord, selectPersonRows } from "./persons";
+import { countPhysicalPersons, selectPersonRows } from "./persons";
 
-const person = (id: string, type: string | null, jobTitle: string | null) => ({ id, name: id, type, jobTitle });
+/** Records as SAP links them: every record's refId is the id of the ERPUSER record (which references itself). */
+const record = (id: string, type: string, refId: string, jobTitle: string | null = "Service Technician") => ({ id, type, refId, jobTitle });
 
-// Shapes as they exist in the demo company (16.11.2026).
-const marcoErp = person("marco-erp", "ERPUSER", "Service Technician");
-const marcoEmployee = person("marco-emp", "EMPLOYEE", "Service Technician");
-const dominicErp = person("dominic-erp", "ERPUSER", null); // OPUSm staff, no job title
-const admin = person("admin", "ERPUSER", null);
-const unnamed = person("unnamed", "EMPLOYEE", null);
-const all = [marcoErp, marcoEmployee, dominicErp, admin, unnamed];
+// Marco: two linked records (as in the demo company)
+const marcoErp = record("marco", "ERPUSER", "marco");
+const marcoEmployee = record("marco-emp", "EMPLOYEE", "marco");
+// Anna: three linked records (ERPUSER, EMPLOYEE, SALESEMPLOYEE)
+const annaErp = record("anna", "ERPUSER", "anna");
+const annaEmployee = record("anna-emp", "EMPLOYEE", "anna");
+const annaSales = record("anna-sales", "SALESEMPLOYEE", "anna");
+// Lukas: a technician without any of our skills, only the ERPUSER record
+const lukasErp = record("lukas", "ERPUSER", "lukas");
+// Dominic: no job title on any record (not a technician)
+const dominicErp = record("dominic", "ERPUSER", "dominic", null);
+const dominicEmployee = record("dominic-emp", "EMPLOYEE", "dominic", null);
+// Eva: only the EMPLOYEE record carries the job title
+const evaErp = record("eva", "ERPUSER", "eva", null);
+const evaEmployee = record("eva-emp", "EMPLOYEE", "eva");
 
-describe("isTechnicianRecord", () => {
-  it("is the ERP user record with a job title", () => {
-    expect(isTechnicianRecord(marcoErp)).toBe(true);
-    expect(isTechnicianRecord(marcoEmployee)).toBe(false);
-    expect(isTechnicianRecord(dominicErp)).toBe(false);
-    expect(isTechnicianRecord(admin)).toBe(false);
+const all = [marcoErp, marcoEmployee, annaErp, annaEmployee, annaSales, lukasErp, dominicErp, dominicEmployee, evaErp, evaEmployee];
+
+describe("selectPersonRows (SAP: records linked by refId; the person is the ERPUSER record)", () => {
+  it("shows one row per technician: the ERPUSER record of each linked group with a job title", () => {
+    expect(selectPersonRows(all, new Set(), false).map((p) => p.id)).toEqual(["marco", "anna", "lukas", "eva"]);
   });
-});
 
-describe("selectPersonRows", () => {
-  it("shows one row per technician by default", () => {
-    expect(selectPersonRows(all, new Set(), false)).toEqual([marcoErp]);
+  it("shows a technician who has none of our skills", () => {
+    expect(selectPersonRows([lukasErp], new Set(), false)).toEqual([lukasErp]);
+  });
+
+  it("hides people without a job title on any record", () => {
+    expect(selectPersonRows([dominicErp, dominicEmployee], new Set(), false)).toEqual([]);
   });
 
   it("never hides a record that holds one of our skills", () => {
-    expect(selectPersonRows(all, new Set(["marco-emp", "admin"]), false)).toEqual([marcoErp, marcoEmployee, admin]);
+    const rows = selectPersonRows(all, new Set(["anna-sales", "dominic-emp"]), false).map((p) => p.id);
+    expect(rows).toEqual(["marco", "anna", "anna-sales", "lukas", "dominic-emp", "eva"]);
+  });
+
+  it("falls back to the first record when a group has no ERPUSER record", () => {
+    const orphan = record("x-emp", "EMPLOYEE", "x");
+    expect(selectPersonRows([orphan], new Set(), false)).toEqual([orphan]);
   });
 
   it("shows every record when asked", () => {
     expect(selectPersonRows(all, new Set(), true)).toEqual(all);
+  });
+});
+
+describe("countPhysicalPersons", () => {
+  it("counts linked groups, not records", () => {
+    expect(countPhysicalPersons(all)).toBe(5);
   });
 });

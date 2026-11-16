@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   Button,
-  CheckBox,
   Icon,
   IllustratedMessage,
   Input,
@@ -11,12 +10,15 @@ import {
   MultiComboBox,
   MultiComboBoxItem,
   Option,
+  SegmentedButton,
+  SegmentedButtonItem,
   Select,
   Text,
 } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, todayIso, type AssignmentStatus } from "@/lib/domain/status";
 import { formatPersonType } from "@/lib/format";
 import { selectPersonRows } from "@/lib/domain/persons";
+import { PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, statusText } from "./statusDisplay";
@@ -37,6 +39,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showAllRecords, setShowAllRecords] = useState(false);
   const today = todayIso();
+  const isPhone = useMediaQuery(PHONE_QUERY);
 
   const definitions = useMemo(() => data?.definitions ?? [], [data]);
   const visibleSkills = useMemo(() => (skillIds.length ? definitions.filter((d) => skillIds.includes(d.id)) : definitions), [definitions, skillIds]);
@@ -45,10 +48,8 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
 
   const query = personQuery.trim().toLowerCase();
   /** One row per technician by default (see src/lib/domain/persons.ts). */
-  const rows = useMemo(
-    () => selectPersonRows(data?.persons ?? [], state.assignedPersonIds, showAllRecords),
-    [data, state.assignedPersonIds, showAllRecords],
-  );
+  const technicianRows = useMemo(() => selectPersonRows(data?.persons ?? [], state.assignedPersonIds, false), [data, state.assignedPersonIds]);
+  const rows = showAllRecords ? (data?.persons ?? []) : technicianRows;
   const visiblePersons = rows.filter((p) => {
     if (query && !`${p.name} ${p.jobTitle ?? ""}`.toLowerCase().includes(query)) return false;
     if (statusFilter === "all") return true;
@@ -77,6 +78,45 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   }
 
   const filtersActive = Boolean(query || skillIds.length || statusFilter !== "all");
+
+  /** Everything one cell (or one line of a phone card) shows. */
+  const cellInfo = (p: Person, d: SkillDefinition) => {
+    const assignment = assignmentByCell.get(cellKey(p.id, d.id));
+    const status = getAssignmentStatus(assignment, today);
+    const certCount = assignment ? (certificatesBySkill.get(assignment.id)?.length ?? 0) : 0;
+    const text = statusText(status, assignment);
+    const label = assignment
+      ? `${p.name}, ${d.name}: ${text}${assignment.proficiencyName ? `, level ${assignment.proficiencyName}` : ""}, ${certCount ? `${certCount} certificate(s)` : "no certificate"}. Edit.`
+      : `${p.name}, ${d.name}: not assigned. Assign.`;
+    return { assignment, status, certCount, display: STATUS_DISPLAY[status], text, label };
+  };
+
+  /** Status, end date, level and certificates; shared by the table cells and the phone cards. */
+  const cellContent = (info: ReturnType<typeof cellInfo>) =>
+    info.assignment ? (
+      <>
+        <span className={styles.cellStatus} style={{ color: info.display.color }}>
+          <Icon name={info.display.icon} className={styles.cellIcon} style={{ color: "inherit" }} />
+          {info.text}
+        </span>
+        <span className={styles.cellMeta}>
+          <span>{info.assignment.proficiencyName ?? "No level"}</span>
+          {info.certCount > 0 && (
+            <span className={styles.cert}>
+              <Icon name="attachment" className={styles.cellIcon} />
+              {info.certCount}
+            </span>
+          )}
+        </span>
+      </>
+    ) : (
+      <span className={styles.empty}>
+        <span aria-hidden>–</span>
+        <span className={styles.assignHint}>
+          <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} /> Assign
+        </span>
+      </span>
+    );
 
   return (
     <div className={styles.wrapper}>
@@ -115,13 +155,6 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             <Option value="none">With a missing skill</Option>
           </Select>
         </div>
-        <CheckBox
-          className={styles.reset}
-          text={`Show all person records (${data?.persons.length ?? 0})`}
-          checked={showAllRecords}
-          onChange={(e) => setShowAllRecords(e.target.checked)}
-          title="FSM keeps every technician twice (as employee and as ERP user) and also lists persons who are not technicians"
-        />
         {filtersActive && (
           <Button
             design="Transparent"
@@ -135,6 +168,28 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             Reset filters
           </Button>
         )}
+      </div>
+
+      <div className={styles.showRow}>
+        <Label id="matrix-show-label" showColon>
+          Show
+        </Label>
+        <SegmentedButton
+          accessibleNameRef="matrix-show-label"
+          onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
+        >
+          <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
+            Technicians ({technicianRows.length})
+          </SegmentedButtonItem>
+          <SegmentedButtonItem data-key="all" selected={showAllRecords}>
+            All person records ({data.persons.length})
+          </SegmentedButtonItem>
+        </SegmentedButton>
+        <Text className={styles.legend}>
+          {showAllRecords
+            ? "Includes the linked Employee records and people without a job title."
+            : "One row per technician: SAP links a person's records, and the ERP user record is the person."}
+        </Text>
       </div>
 
       <div className={styles.summary} aria-live="polite">
@@ -158,12 +213,57 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             </button>
           ))}
         <span className={styles.legend}>
-          <Icon name="attachment" className={styles.chipIcon} /> = certificate attached · click a cell to assign or edit
+          <Icon name="attachment" className={styles.chipIcon} /> = certificate attached ·{" "}
+          {isPhone ? "tap a skill to edit, “+” to assign" : "click a cell to assign or edit"}
         </span>
       </div>
 
       {visiblePersons.length === 0 ? (
         <IllustratedMessage name="NoFilterResults" titleText="No persons match the filters" subtitleText="Change or reset the filters." />
+      ) : isPhone ? (
+        // On a phone a wide matrix is hard to use: one card per person, skills stacked.
+        <ul className={styles.cards}>
+          {visiblePersons.map((p) => (
+            <li key={p.id} className={styles.card}>
+              <div className={styles.cardHead}>
+                <span className={styles.personName}>{p.name}</span>
+                <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
+              </div>
+              <ul className={styles.cardSkills}>
+                {visibleSkills
+                  .map((d) => ({ d, info: cellInfo(p, d) }))
+                  .filter(({ info }) => info.assignment)
+                  .map(({ d, info }) => (
+                    <li key={d.id} className={styles.cardSkill} data-status={info.status}>
+                      <button type="button" className={styles.cellButton} onClick={() => onOpenCell(p, d)} aria-label={info.label}>
+                        <span className={styles.cardSkillName}>{d.name}</span>
+                        {cellContent(info)}
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+              {visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
+                <div className={styles.cardMissing}>
+                  <span className={styles.personMeta}>Not assigned:</span>
+                  {visibleSkills
+                    .filter((d) => !assignmentByCell.has(cellKey(p.id, d.id)))
+                    .map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        className={styles.assignChip}
+                        onClick={() => onOpenCell(p, d)}
+                        aria-label={`${p.name}, ${d.name}: not assigned. Assign.`}
+                      >
+                        <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} />
+                        {d.name}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
       ) : (
         <div className={styles.scroller}>
           <table className={styles.table}>
@@ -187,41 +287,17 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
                     <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
                   </th>
                   {visibleSkills.map((d) => {
-                    const assignment = assignmentByCell.get(cellKey(p.id, d.id));
-                    const status = getAssignmentStatus(assignment, today);
-                    const certCount = assignment ? (certificatesBySkill.get(assignment.id)?.length ?? 0) : 0;
-                    const display = STATUS_DISPLAY[status];
-                    const text = statusText(status, assignment);
-                    const label = assignment
-                      ? `${p.name}, ${d.name}: ${text}${assignment.proficiencyName ? `, level ${assignment.proficiencyName}` : ""}, ${certCount ? `${certCount} certificate(s)` : "no certificate"}. Edit.`
-                      : `${p.name}, ${d.name}: not assigned. Assign.`;
+                    const info = cellInfo(p, d);
                     return (
-                      <td key={d.id} className={styles.cell} data-status={status}>
-                        <button type="button" className={styles.cellButton} onClick={() => onOpenCell(p, d)} aria-label={label} title={label}>
-                          {assignment ? (
-                            <>
-                              <span className={styles.cellStatus} style={{ color: display.color }}>
-                                <Icon name={display.icon} className={styles.cellIcon} style={{ color: "inherit" }} />
-                                {text}
-                              </span>
-                              <span className={styles.cellMeta}>
-                                <span>{assignment.proficiencyName ?? "No level"}</span>
-                                {certCount > 0 && (
-                                  <span className={styles.cert}>
-                                    <Icon name="attachment" className={styles.cellIcon} />
-                                    {certCount}
-                                  </span>
-                                )}
-                              </span>
-                            </>
-                          ) : (
-                            <span className={styles.empty}>
-                              <span aria-hidden>–</span>
-                              <span className={styles.assignHint}>
-                                <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} /> Assign
-                              </span>
-                            </span>
-                          )}
+                      <td key={d.id} className={styles.cell} data-status={info.status}>
+                        <button
+                          type="button"
+                          className={styles.cellButton}
+                          onClick={() => onOpenCell(p, d)}
+                          aria-label={info.label}
+                          title={info.label}
+                        >
+                          {cellContent(info)}
                         </button>
                       </td>
                     );

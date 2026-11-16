@@ -42,7 +42,7 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: "0.75rem" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "0.75rem" }}>
       <Toolbar design="Transparent" style={{ paddingInline: 0 }}>
         <Title level="H4">Skills ({definitions.length})</Title>
         <ToolbarSpacer />

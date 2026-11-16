@@ -7,6 +7,8 @@ export interface Person {
   jobTitle: string | null;
   /** FSM person type, e.g. EMPLOYEE or ERPUSER */
   type: string | null;
+  /** SAP links the records of one physical person through refId (= the ERPUSER record's id). */
+  refId: string | null;
 }
 
 /** A skill definition = FSM Tag in our namespace. */

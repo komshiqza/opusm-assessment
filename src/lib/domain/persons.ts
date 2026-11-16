@@ -1,28 +1,47 @@
 /**
- * Which person records the matrix shows by default.
+ * Which person records the matrix shows by default: one row per physical person.
  *
- * Observation in the demo company (not a documented FSM rule): every technician exists twice, as
- * an EMPLOYEE and an ERPUSER record with the same name, e-mail, user name and code (e.g. TECH01).
- * In this demo data all 40 seeded skills point to the ERPUSER records, so we assume that is the
- * record the business uses for technicians. Persons without a job title (OPUSm staff, "admin",
- * an unnamed record) are not technicians.
- * The two records are never merged: a skill belongs to one specific person id.
+ * SAP documents this in the Person DTO (v23): "A physical person can have up to 3 different
+ * entries" (ERPUSER, EMPLOYEE, SALESEMPLOYEE). "They are linked through the refId property", which
+ * equals the ERPUSER id, and "that person is actually the one of type ERPUSER".
+ * https://help.sap.com/docs/SAP_FIELD_SERVICE_MANAGEMENT/fsm_data_model/persondto_v23.html
+ *
+ * So: group the records by refId and show the ERPUSER record of each group in which any record has
+ * a job title (people without one, like OPUSm staff or "admin", are not technicians). A record that
+ * holds one of our skills is always shown, so no assignment can disappear. Records are never
+ * merged: a skill belongs to one specific person id.
  */
-export const SKILL_HOLDER_TYPE = "ERPUSER";
 
-export function isTechnicianRecord(person: { type: string | null; jobTitle: string | null }): boolean {
-  return person.type === SKILL_HOLDER_TYPE && Boolean(person.jobTitle?.trim());
+interface PersonRecord {
+  id: string;
+  type: string | null;
+  refId?: string | null;
+  jobTitle: string | null;
 }
 
-/**
- * Default: one row per technician. A record that already holds one of our skills is always shown,
- * so no assignment can disappear from the matrix. `showAll` returns every active person record.
- */
-export function selectPersonRows<P extends { id: string; type: string | null; jobTitle: string | null }>(
-  persons: P[],
-  personIdsWithAssignments: Set<string>,
-  showAll: boolean,
-): P[] {
+/** The physical person a record belongs to (SAP: refId = ERPUSER id; missing refId = its own id). */
+function physicalPersonKey(p: PersonRecord): string {
+  return p.refId || p.id;
+}
+
+function groupByPhysicalPerson<P extends PersonRecord>(persons: P[]): P[][] {
+  const groups = new Map<string, P[]>();
+  for (const p of persons) groups.set(physicalPersonKey(p), [...(groups.get(physicalPersonKey(p)) ?? []), p]);
+  return [...groups.values()];
+}
+
+export function countPhysicalPersons(persons: PersonRecord[]): number {
+  return groupByPhysicalPerson(persons).length;
+}
+
+export function selectPersonRows<P extends PersonRecord>(persons: P[], personIdsWithAssignments: Set<string>, showAll: boolean): P[] {
   if (showAll) return persons;
-  return persons.filter((p) => isTechnicianRecord(p) || personIdsWithAssignments.has(p.id));
+  const shown = new Set<string>();
+  for (const group of groupByPhysicalPerson(persons)) {
+    if (!group.some((p) => p.jobTitle?.trim())) continue;
+    const main = group.find((p) => p.type === "ERPUSER" && p.id === physicalPersonKey(p)) ?? group.find((p) => p.type === "ERPUSER") ?? group[0];
+    shown.add(main.id);
+  }
+  for (const p of persons) if (personIdsWithAssignments.has(p.id)) shown.add(p.id);
+  return persons.filter((p) => shown.has(p.id));
 }
