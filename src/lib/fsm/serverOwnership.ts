@@ -50,7 +50,17 @@ export async function checkWriteOwnership(segments: string[], method: string, bo
     const key = `${method} ${api}/${version}/${rest.map((s, i) => (i === 0 || /^(skills|search)$/.test(s) ? s : ":id")).join("/")}`;
     const check = CHECKS[key];
     if (!check) return `Refused: ${method} ${segments.join("/")} is not a write this app makes.`;
-    await check({ rest, body, reader });
+    // Receive the whole body before any ownership lookup, so a slow client cannot hold a finished
+    // check open while ownership changes in FSM. A body that cannot be read is refused when used.
+    const received = await body().then(
+      (value) => ({ ok: true as const, value }),
+      () => ({ ok: false as const }),
+    );
+    const parsedBody: Body = async () => {
+      if (!received.ok) throw new OwnershipError("Refused: the request body is not valid JSON.");
+      return received.value;
+    };
+    await check({ rest, body: parsedBody, reader });
     return null;
   } catch (e) {
     if (e instanceof OwnershipError) return e.message;

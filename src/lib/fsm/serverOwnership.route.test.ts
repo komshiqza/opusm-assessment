@@ -31,6 +31,8 @@ interface Call {
 }
 let calls: Call[];
 let failSearches: boolean;
+/** Tag name FSM reports for OWN_SKILL (changed during a test to simulate another writer). */
+let ownSkillTagName: string;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -39,6 +41,7 @@ function json(data: unknown, status = 200) {
 beforeEach(() => {
   calls = [];
   failSearches = false;
+  ownSkillTagName = "komshiqza::Welding";
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input);
     const method = (init.method ?? "GET").toUpperCase();
@@ -54,7 +57,7 @@ beforeEach(() => {
           content: [
             { id: DEMO_SKILL, tagId: DEMO_TAG, tagName: "Gasnetz-Anschluss" },
             { id: JDOE_SKILL, tagId: JDOE_TAG, tagName: "jdoe::Welding" },
-            { id: OWN_SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" },
+            { id: OWN_SKILL, tagId: OWN_TAG, tagName: ownSkillTagName },
           ],
         });
       }
@@ -118,6 +121,33 @@ describe("refused on the server: 403, and nothing reaches FSM", () => {
     const res = await send("DELETE", "skill/v2/skills", [{ id: OWN_SKILL }]);
     expect(res.status).toBe(403);
     expect(res.body?.error).toMatch(/could not be checked/);
+    expect(writesReachingFsm()).toEqual([]);
+  });
+});
+
+describe("time of check", () => {
+  it("checks ownership only after the whole body has arrived", async () => {
+    // A slow client holds the body open; meanwhile someone else moves the skill out of our namespace.
+    let finishBody!: () => void;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"endDate":'));
+        finishBody = () => {
+          controller.enqueue(new TextEncoder().encode('"2027-01-01"}'));
+          controller.close();
+        };
+      },
+    });
+    const path = `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`;
+    const req = new Request(`http://localhost/api/fsm/${path}`, { method: "PATCH", body: stream, duplex: "half" } as RequestInit);
+    const pending = PATCH(req, { params: Promise.resolve({ path: path.split("/") }) });
+
+    await new Promise((r) => setTimeout(r, 20));
+    ownSkillTagName = "other::Transferred";
+    finishBody();
+
+    const res = await pending;
+    expect(res.status).toBe(403);
     expect(writesReachingFsm()).toEqual([]);
   });
 });
