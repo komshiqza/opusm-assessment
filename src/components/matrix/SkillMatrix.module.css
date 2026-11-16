@@ -155,6 +155,13 @@
   color: var(--sapContent_LabelColor);
 }
 
+/* Every second row slightly shaded (SAP's own list colour, light and dark), the sticky name cell included. */
+.table tbody tr:nth-child(even) .personCell,
+.table tbody tr:nth-child(even) .cell {
+  background: var(--sapList_AlternatingBackground);
+}
+
+/* After the stripes on purpose: hover wins on striped rows too. */
 .table tbody tr:hover .personCell,
 .table tbody tr:hover .cell {
   background: var(--sapList_Hover_Background);
