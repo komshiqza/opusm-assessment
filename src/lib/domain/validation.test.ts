@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CERTIFICATE_BYTES, effectiveStartDate, validateCertificateFile, validateSkillName, validateValidity } from "./validation";
+import { MAX_CERTIFICATE_BYTES, effectiveStartDate, splitCertificateFiles, validateCertificateFile, validateSkillName, validateValidity } from "./validation";
 
 describe("validateValidity", () => {
   it.each([
@@ -75,5 +75,18 @@ describe("effectiveStartDate", () => {
   it("uses today when 'valid from' is empty (FSM requires a start date)", () => {
     expect(effectiveStartDate(null, "2026-11-16")).toBe("2026-11-16");
     expect(effectiveStartDate("2025-01-01", "2026-11-16")).toBe("2025-01-01");
+  });
+});
+
+describe("splitCertificateFiles", () => {
+  it("keeps valid files in order and explains the others", () => {
+    const files = [
+      { name: "a.pdf", size: 10 },
+      { name: "notes.docx", size: 10 },
+      { name: "b.png", size: 10 },
+    ];
+    const { valid, problems } = splitCertificateFiles(files);
+    expect(valid.map((f) => f.name)).toEqual(["a.pdf", "b.png"]);
+    expect(problems).toEqual([expect.stringMatching(/^notes\.docx: only PDF, JPG and PNG/)]);
   });
 });

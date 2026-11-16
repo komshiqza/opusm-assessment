@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { Bar, BusyIndicator, Button, DatePicker, Dialog, Label, MessageStrip, Option, Select, Text } from "@ui5/webcomponents-react";
+import { useRef, useState } from "react";
+import { Bar, BusyIndicator, Button, DatePicker, Dialog, FileUploader, Label, MessageStrip, Option, Select, Text } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, todayIso } from "@/lib/domain/status";
-import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
-import { createAssignment, deleteAssignment, updateAssignment } from "@/lib/skills/repository";
+import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, effectiveStartDate, splitCertificateFiles, validateValidity } from "@/lib/domain/validation";
+import {
+  createAssignmentWithCertificates,
+  deleteAssignment,
+  updateAssignment,
+  uploadCertificates,
+  type UploadOutcome,
+} from "@/lib/skills/repository";
 import { toUserMessage } from "@/lib/errors";
-import { formatDate, formatPersonType } from "@/lib/format";
+import { formatDate, formatFileSize, formatPersonType } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -35,9 +41,17 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const [from, setFrom] = useState(assignment?.startDate ?? "");
   const [to, setTo] = useState(assignment?.endDate ?? "");
   const [busy, setBusy] = useState(false);
+  /** Same as `busy`, set synchronously: a fast second click cannot start a second save. */
+  const busyRef = useRef(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [justCreated, setJustCreated] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  /** New assignment: certificates picked before saving, uploaded right after the assignment exists. */
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pickProblems, setPickProblems] = useState<string[]>([]);
+  const [pickerKey, setPickerKey] = useState(0);
+  /** Files FSM did not accept during save or retry; they stay listed until uploaded or dismissed. */
+  const [failed, setFailed] = useState<UploadOutcome["failed"]>([]);
   /** Certificate uploads running: the assignment must not be removed or the dialog closed meanwhile. */
   const [uploading, setUploading] = useState(false);
   const locked = busy || uploading;
@@ -48,28 +62,71 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const fromInvalid = Boolean(dateError?.startsWith("“Valid from”"));
   const toInvalid = Boolean(dateError) && !fromInvalid;
 
-  const save = async () => {
-    if (dateError) return;
+  /** Runs one save or retry at a time and keeps the dialog locked meanwhile. */
+  const runLocked = async (work: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
-    const input = { startDate: from || null, endDate: to || null, proficiencyId: levelId || null };
     try {
+      await work();
+    } catch (e) {
+      setError(toUserMessage(e));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  const showProgress = (file: File, index: number, total: number) => setProgress(`Uploading ${file.name} (${index + 1} of ${total})…`);
+
+  const save = () =>
+    runLocked(async () => {
+      if (dateError) return;
+      const input = { startDate: from || null, endDate: to || null, proficiencyId: levelId || null };
       if (assignment) {
+        setProgress("Saving…");
         await updateAssignment(assignment.id, input);
         await state.reload();
         toast("Assignment saved");
         onClose();
-      } else {
-        await createAssignment(definition.id, person.id, input);
-        await state.reload();
-        setJustCreated(true);
-        toast(`${definition.name} assigned to ${person.name}`);
+        return;
       }
-    } catch (e) {
-      setError(toUserMessage(e));
-    } finally {
-      setBusy(false);
-    }
+      setProgress("Assigning…");
+      const result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress);
+      setPendingFiles([]);
+      setProgress("Refreshing…");
+      await state.reload();
+      const count = result.uploaded.length;
+      if (result.failed.length === 0) {
+        toast(`${definition.name} assigned to ${person.name}${count ? ` with ${count} certificate${count > 1 ? "s" : ""}` : ""}`);
+        onClose();
+        return;
+      }
+      // The assignment exists now; the dialog stays open with the files that still need uploading.
+      setFailed(result.failed);
+    });
+
+  const retryFailed = () =>
+    runLocked(async () => {
+      if (!assignment) return;
+      const outcome = await uploadCertificates(
+        assignment.id,
+        failed.map((f) => f.file),
+        showProgress,
+      );
+      setFailed(outcome.failed);
+      setProgress("Refreshing…");
+      await state.reload();
+      if (outcome.failed.length === 0) toast("All certificates uploaded");
+    });
+
+  const pickFiles = (files: File[]) => {
+    const { valid, problems } = splitCertificateFiles(files);
+    setPickProblems(problems);
+    setPendingFiles((current) => [...current, ...valid.filter((f) => !current.some((c) => c.name === f.name && c.size === f.size))]);
+    setPickerKey((k) => k + 1);
   };
 
   const status = getAssignmentStatus(assignment, today);
@@ -86,19 +143,27 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
           <Bar
             design="Footer"
             startContent={
-              assignment && (
-                <Button design="Transparent" icon="delete" onClick={() => setConfirmRemove(true)} disabled={locked}>
-                  Remove assignment
-                </Button>
+              progress ? (
+                <Text className={styles.muted}>{progress}</Text>
+              ) : (
+                assignment && (
+                  <Button design="Transparent" icon="delete" onClick={() => setConfirmRemove(true)} disabled={locked}>
+                    Remove assignment
+                  </Button>
+                )
               )
             }
             endContent={
               <>
                 <Button design="Emphasized" onClick={save} disabled={locked || Boolean(dateError)}>
-                  {assignment ? "Save" : "Assign"}
+                  {assignment
+                    ? "Save"
+                    : pendingFiles.length
+                      ? `Assign and upload ${pendingFiles.length} file${pendingFiles.length > 1 ? "s" : ""}`
+                      : "Assign"}
                 </Button>
                 <Button design="Transparent" onClick={onClose} disabled={locked}>
-                  {justCreated ? "Done" : "Cancel"}
+                  {failed.length ? "Close" : "Cancel"}
                 </Button>
               </>
             }
@@ -118,12 +183,6 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                 </Text>
               )}
             </div>
-
-            {justCreated && (
-              <MessageStrip design="Positive" hideCloseButton>
-                Assigned. You can add certificates below now.
-              </MessageStrip>
-            )}
 
             <div className={styles.form}>
               {levels.length > 0 ? (
@@ -188,10 +247,70 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
               </MessageStrip>
             )}
 
+            {failed.length > 0 && (
+              <MessageStrip design="Negative" onClose={() => setFailed([])}>
+                The skill is assigned
+                {certificates.length ? ` and ${certificates.length} certificate${certificates.length > 1 ? "s are" : " is"} uploaded` : ""}.{" "}
+                {failed.length === 1 ? "This file was not uploaded:" : `These ${failed.length} files were not uploaded:`}
+                <ul className={styles.errorList}>
+                  {failed.map((f) => (
+                    <li key={`${f.file.name}-${f.file.size}`}>
+                      {f.file.name}: {f.error}
+                    </li>
+                  ))}
+                </ul>
+                <Button icon="refresh" onClick={retryFailed} disabled={locked}>
+                  Retry failed uploads
+                </Button>
+              </MessageStrip>
+            )}
+
             {assignment ? (
               <CertificateSection assignmentId={assignment.id} certificates={certificates} onChanged={state.reload} onBusyChange={setUploading} />
             ) : (
-              <Text className={styles.muted}>You can add certificates after the skill is assigned.</Text>
+              <section className={styles.certificates} aria-labelledby="new-certificates-title">
+                <Label id="new-certificates-title">Certificates (optional)</Label>
+                {pendingFiles.length > 0 && (
+                  <ul className={styles.certList}>
+                    {pendingFiles.map((f) => (
+                      <li key={`${f.name}-${f.size}`} className={styles.certItem}>
+                        <span className={styles.certText}>
+                          <span>{f.name}</span>
+                          <span className={styles.muted}>{formatFileSize(f.size)} · uploaded when you assign</span>
+                        </span>
+                        <Button
+                          design="Transparent"
+                          icon="decline"
+                          tooltip={`Remove ${f.name}`}
+                          accessibleName={`Remove ${f.name}`}
+                          disabled={locked}
+                          onClick={() => setPendingFiles((current) => current.filter((c) => c !== f))}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className={styles.uploadRow}>
+                  <FileUploader
+                    key={pickerKey}
+                    accept={CERTIFICATE_ACCEPT}
+                    multiple
+                    hideInput
+                    disabled={locked}
+                    onChange={(e) => pickFiles(Array.from(e.detail.files ?? []))}
+                  >
+                    <Button icon="add" disabled={locked}>
+                      Choose certificates
+                    </Button>
+                  </FileUploader>
+                  <Text className={styles.muted}>PDF, JPG or PNG, max. {MAX_CERTIFICATE_LABEL} each</Text>
+                </div>
+                {pickProblems.length > 0 && (
+                  <MessageStrip design="Negative" onClose={() => setPickProblems([])}>
+                    {pickProblems.join(" · ")}
+                  </MessageStrip>
+                )}
+              </section>
             )}
           </div>
         </BusyIndicator>

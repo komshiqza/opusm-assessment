@@ -19,3 +19,9 @@ export function formatPersonType(type: string | null): string {
   if (type === "ERPUSER") return "ERP user";
   return type ?? "";
 }
+
+/** File size for people: "640 KB" below 1 MB, otherwise "2.4 MB". */
+export function formatFileSize(bytes: number): string {
+  const mb = bytes / 1024 / 1024;
+  return mb < 1 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${mb.toFixed(1)} MB`;
+}

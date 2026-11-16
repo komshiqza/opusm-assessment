@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { BusyIndicator, Button, FileUploader, Icon, Link, MessageStrip, Text, Title } from "@ui5/webcomponents-react";
-import { deleteCertificate, uploadCertificate } from "@/lib/skills/repository";
-import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, validateCertificateFile } from "@/lib/domain/validation";
+import { deleteCertificate, uploadCertificates } from "@/lib/skills/repository";
+import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/validation";
 import { toUserMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import type { Certificate } from "@/lib/skills/types";
@@ -36,24 +36,11 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onBu
   const [inputKey, setInputKey] = useState(0);
 
   const upload = async (files: File[]) => {
-    const problems: string[] = [];
-    const valid = files.filter((f) => {
-      const check = validateCertificateFile(f);
-      if (!check.ok) problems.push(check.error);
-      return check.ok;
-    });
-    let uploaded = 0;
+    const { valid, problems } = splitCertificateFiles(files);
     if (valid.length) onBusyChange(true);
-    for (const [i, file] of valid.entries()) {
-      setProgress(`Uploading ${file.name} (${i + 1} of ${valid.length})…`);
-      try {
-        await uploadCertificate(assignmentId, file);
-        uploaded++;
-      } catch (e) {
-        problems.push(`${file.name}: ${toUserMessage(e)}`);
-      }
-    }
-    setErrors(problems);
+    const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`));
+    setErrors([...problems, ...outcome.failed.map((f) => `${f.file.name}: ${f.error}`)]);
+    const uploaded = outcome.uploaded.length;
     if (uploaded) {
       setProgress("Refreshing…");
       await onChanged();

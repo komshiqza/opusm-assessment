@@ -59,3 +59,15 @@ export function validateCertificateFile(file: { name: string; size: number }): C
   }
   return { ok: true, type };
 }
+
+/** Splits picked files into the ones that may be uploaded and messages for the others. */
+export function splitCertificateFiles<F extends { name: string; size: number }>(files: F[]): { valid: F[]; problems: string[] } {
+  const valid: F[] = [];
+  const problems: string[] = [];
+  for (const file of files) {
+    const check = validateCertificateFile(file);
+    if (check.ok) valid.push(file);
+    else problems.push(check.error);
+  }
+  return { valid, problems };
+}

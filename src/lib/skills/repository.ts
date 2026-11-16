@@ -15,6 +15,7 @@ import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/cand
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
 import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
 import { effectiveStartDate, validateCertificateFile, validateValidity } from "@/lib/domain/validation";
+import { toUserMessage } from "@/lib/errors";
 import type { Assignment, AssignmentInput, Certificate, Person, ProficiencyScale, SkillDefinition } from "./types";
 
 /** One scale for all our skills. */
@@ -331,6 +332,49 @@ export async function uploadCertificate(assignmentId: string, file: File): Promi
     object: { objectId: assignmentId, objectType: "SKILL" },
   });
   return toCertificate({ ...created, object: created.object ?? { objectId: assignmentId, objectType: "SKILL" } });
+}
+
+export interface UploadOutcome {
+  uploaded: Certificate[];
+  /** Files FSM did not accept, with the reason for the user. Nothing else was lost. */
+  failed: { file: File; error: string }[];
+}
+
+/**
+ * Uploads files one after another to one assignment. A failed file does not stop the others;
+ * it is returned with FSM's message so the user can retry exactly those files.
+ */
+export async function uploadCertificates(
+  assignmentId: string,
+  files: File[],
+  onProgress?: (file: File, index: number, total: number) => void,
+): Promise<UploadOutcome> {
+  const outcome: UploadOutcome = { uploaded: [], failed: [] };
+  for (const [index, file] of files.entries()) {
+    onProgress?.(file, index, files.length);
+    try {
+      outcome.uploaded.push(await uploadCertificate(assignmentId, file));
+    } catch (e) {
+      outcome.failed.push({ file, error: toUserMessage(e) });
+    }
+  }
+  return outcome;
+}
+
+/**
+ * Assign a skill and upload its certificates in one step for the user. FSM needs the assignment
+ * first, because an attachment is linked to a skill id. If creating the assignment fails, nothing
+ * is uploaded; if an upload fails, the assignment stays and the failed files are returned.
+ */
+export async function createAssignmentWithCertificates(
+  tagId: string,
+  personId: string,
+  input: AssignmentInput,
+  files: File[],
+  onProgress?: (file: File, index: number, total: number) => void,
+): Promise<{ assignment: Assignment } & UploadOutcome> {
+  const assignment = await createAssignment(tagId, personId, input);
+  return { assignment, ...(await uploadCertificates(assignment.id, files, onProgress)) };
 }
 
 const CERTIFICATE_MIME: Record<string, string> = { PDF: "application/pdf", JPEG: "image/jpeg", PNG: "image/png" };

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OwnershipError } from "@/lib/fsm/guard";
 import {
   createAssignment,
+  createAssignmentWithCertificates,
+  uploadCertificates,
   loadCertificateFile,
   deleteAssignment,
   deleteCertificate,
@@ -41,6 +43,8 @@ let deletedAttachments: Set<string>;
 let queryAnswer: (sql: string) => unknown[];
 let searchAnswer: (path: string, filter: { field: string; value: unknown }[]) => unknown[];
 let attachmentAnswer: unknown = null;
+/** Attachment uploads with these file names fail in the fake FSM. */
+let failingUploads: Set<string>;
 /** Answer of bulk (v2) writes; default: every item succeeded. */
 let bulkAnswer: ((path: string, method: string, body: unknown) => { hasErrors: boolean; results: unknown[] } | null) = () => null;
 
@@ -54,6 +58,7 @@ beforeEach(() => {
   queryAnswer = () => [];
   searchAnswer = () => [];
   attachmentAnswer = null;
+  failingUploads = new Set();
   bulkAnswer = () => null;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input, "http://localhost");
@@ -81,7 +86,8 @@ beforeEach(() => {
       return json(bulkAnswer(path, method, body) ?? { hasErrors: false, results: [{ status: 200, resource: { id: SKILL, ...body?.[0] } }] }, 207);
     }
     if (path.startsWith("data/v4/Attachment") && method === "POST") {
-      return json({ data: [{ attachment: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] });
+      if (failingUploads.has(body.fileName)) return json({ error: "CA-999", message: "CA-999: simulated upload failure" }, 500);
+      return json({ data: [{ attachment: { id: ATTACHMENT, fileName: body.fileName, type: body.type, object: { objectId: SKILL, objectType: "SKILL" } } }] });
     }
     return json({});
   });
@@ -254,5 +260,51 @@ describe("certificate files", () => {
   it("passes FSM's own error message on, not only the HTTP status", async () => {
     attachmentAnswer = null;
     await expect(loadCertificateFile(cert)).rejects.toThrow(/CA-20: Object Attachment with id .* not found/);
+  });
+});
+
+describe("assign and upload certificates in one step", () => {
+  const files = ["a.pdf", "b.pdf", "c.pdf"].map((name) => new File(["%PDF-1.4 dummy"], name, { type: "application/pdf" }));
+  const input = { startDate: null, endDate: null, proficiencyId: null };
+
+  beforeEach(() => {
+    searchAnswer = (path, filter) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      // the duplicate check (tag + person) finds nothing; the ownership check by id finds the new skill
+      if (path === "skill/v1/skills/search" && filter.some((f) => f.field === "id")) return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
+      return [];
+    };
+  });
+
+  const steps = () =>
+    writes().map((c) => (c.path === "data/v4/Attachment" ? `upload ${(c.body as { fileName: string }).fileName}` : `${c.method} ${c.path}`));
+
+  it("creates the assignment first, then uploads every file in order", async () => {
+    const result = await createAssignmentWithCertificates(OWN_TAG, PERSON, input, files);
+    expect(steps()).toEqual(["POST skill/v2/skills", "upload a.pdf", "upload b.pdf", "upload c.pdf"]);
+    expect(result.assignment.id).toBe(SKILL);
+    expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "b.pdf", "c.pdf"]);
+    expect(result.failed).toEqual([]);
+  });
+
+  it("keeps the assignment when the 2nd of 3 uploads fails, reports it, and a retry uploads it", async () => {
+    failingUploads = new Set(["b.pdf"]);
+    const result = await createAssignmentWithCertificates(OWN_TAG, PERSON, input, files);
+    expect(result.assignment.id).toBe(SKILL);
+    expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "c.pdf"]);
+    expect(result.failed.map((f) => [f.file.name, f.error])).toEqual([["b.pdf", expect.stringContaining("CA-999: simulated upload failure")]]);
+
+    failingUploads = new Set();
+    calls = [];
+    const retry = await uploadCertificates(result.assignment.id, result.failed.map((f) => f.file));
+    expect(retry).toMatchObject({ failed: [] });
+    expect(steps()).toEqual(["upload b.pdf"]);
+  });
+
+  it("uploads nothing when creating the assignment fails", async () => {
+    bulkAnswer = (path, method) =>
+      path === "skill/v2/skills" && method === "POST" ? { hasErrors: true, results: [{ status: 400, error: { detail: "Simulated create failure" } }] } : null;
+    await expect(createAssignmentWithCertificates(OWN_TAG, PERSON, input, files)).rejects.toThrow(/Simulated create failure/);
+    expect(steps()).toEqual(["POST skill/v2/skills"]);
   });
 });
