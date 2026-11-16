@@ -28,6 +28,7 @@ import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
+import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
 import styles from "./SkillMatrix.module.css";
 
 type StatusFilter = "all" | AssignmentStatus;
@@ -201,6 +202,27 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             Reset filters
           </Button>
         )}
+        <Button
+          design="Transparent"
+          icon="excel-attachment"
+          className={styles.export}
+          tooltip="Download the rows and skill columns shown now as a CSV file for Excel"
+          onClick={() =>
+            downloadCsv(
+              matrixCsv(
+                visiblePersons,
+                visibleSkills,
+                (personId, tagId) => assignmentByCell.get(cellKey(personId, tagId)),
+                (assignmentId) => certificatesBySkill.get(assignmentId)?.length ?? 0,
+                today,
+              ),
+              csvFileName(today),
+            )
+          }
+          disabled={visiblePersons.length === 0}
+        >
+          Export CSV
+        </Button>
       </div>
 
       <div className={styles.showRow}>

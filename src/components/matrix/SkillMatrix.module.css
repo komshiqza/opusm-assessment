@@ -27,6 +27,12 @@
   align-self: flex-end;
 }
 
+/* Export sits at the end of the filter bar. */
+.export {
+  align-self: flex-end;
+  margin-left: auto;
+}
+
 .summary {
   display: flex;
   flex-wrap: wrap;
