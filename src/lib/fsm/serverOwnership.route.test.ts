@@ -29,6 +29,16 @@ interface Call {
   method: string;
   path: string;
 }
+/** A minimal valid PDF, base64 as the app sends it. */
+const PDF_B64 = Buffer.from("%PDF-1.4\n% dummy\n").toString("base64");
+const upload = (objectId: string, extra: Record<string, unknown> = {}) => ({
+  fileName: "a.pdf",
+  type: "PDF",
+  fileContent: PDF_B64,
+  object: { objectId, objectType: "SKILL" },
+  ...extra,
+});
+
 let calls: Call[];
 let failSearches: boolean;
 /** Tag name FSM reports for OWN_SKILL (changed during a test to simulate another writer). */
@@ -98,8 +108,8 @@ describe("refused on the server: 403, and nothing reaches FSM", () => {
     ["mix one own and one foreign item in a bulk delete", "DELETE", "skill/v2/skills", [{ id: OWN_SKILL }, { id: DEMO_SKILL }]],
     ["edit a demo skill", "PATCH", `skill/v1/tags/${DEMO_TAG}/skills/${DEMO_SKILL}`, { endDate: "2027-01-01" }],
     ["edit a demo skill through our tag's path", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${DEMO_SKILL}`, { endDate: "2027-01-01" }],
-    ["upload a certificate to a demo skill", "POST", "data/v4/Attachment", { fileName: "a.pdf", type: "PDF", object: { objectId: DEMO_SKILL, objectType: "SKILL" } }],
-    ["upload a file to a person", "POST", "data/v4/Attachment", { fileName: "a.pdf", type: "PDF", object: { objectId: PERSON, objectType: "PERSON" } }],
+    ["upload a certificate to a demo skill", "POST", "data/v4/Attachment", upload(DEMO_SKILL)],
+    ["upload a file to a person", "POST", "data/v4/Attachment", upload(PERSON, { object: { objectId: PERSON, objectType: "PERSON" } })],
     ["delete an attachment of a demo skill", "DELETE", `data/v4/Attachment/${DEMO_ATTACHMENT}`, undefined],
     ["delete an attachment that does not exist", "DELETE", `data/v4/Attachment/${id("4")}`, undefined],
     ["unknown write the proxy allows: PATCH a Tag through the Data API", "PATCH", `data/v4/Tag/${OWN_TAG}`, { name: "komshiqza::X" }],
@@ -161,7 +171,7 @@ describe("our own writes still reach FSM", () => {
     ["assign our tag", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, startDate: "2026-01-01" }]],
     ["edit our skill", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { endDate: "2027-01-01", proficiencyId: null }],
     ["delete our skill", "DELETE", "skill/v2/skills", [{ id: OWN_SKILL }]],
-    ["upload a certificate to our skill", "POST", "data/v4/Attachment", { fileName: "a.pdf", type: "PDF", object: { objectId: OWN_SKILL, objectType: "SKILL" } }],
+    ["upload a certificate to our skill", "POST", "data/v4/Attachment", upload(OWN_SKILL)],
     ["delete our certificate", "DELETE", `data/v4/Attachment/${OWN_ATTACHMENT}?forceDelete=true`, undefined],
   ] as const)("%s", async (_name, method, path, body) => {
     const res = await send(method, path, body);
@@ -173,5 +183,50 @@ describe("our own writes still reach FSM", () => {
     const res = await send("POST", "skill/v1/skills/search", { filter: [], page: 0, size: 10 });
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("certificate files are checked on the server (size and content)", () => {
+  const b64 = (bytes: Uint8Array | Buffer) => Buffer.from(bytes).toString("base64");
+  const pdfOfSize = (size: number) => {
+    const head = Buffer.from("%PDF-1.4\n");
+    return b64(Buffer.concat([head, Buffer.alloc(size - head.length, 32)]));
+  };
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+  const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46]);
+  const EXE = Buffer.from("MZ\x90\x00\x03\x00\x00\x00 this program cannot be run in DOS mode");
+
+  it.each([
+    ["a PDF", { fileName: "a.pdf", type: "PDF", fileContent: PDF_B64 }],
+    ["a PNG", { fileName: "a.png", type: "PNG", fileContent: b64(PNG) }],
+    ["a JPEG", { fileName: "a.jpg", type: "JPEG", fileContent: b64(JPEG) }],
+    ["exactly 5 MB", { fileName: "a.pdf", type: "PDF", fileContent: pdfOfSize(5 * 1024 * 1024) }],
+  ])("lets %s through to FSM", async (_name, file) => {
+    const res = await send("POST", "data/v4/Attachment", upload(OWN_SKILL, file));
+    expect(res.status).toBe(200);
+    expect(writesReachingFsm()).toHaveLength(1);
+  });
+
+  it("refuses 5 MB + 1 byte with 413", async () => {
+    const res = await send("POST", "data/v4/Attachment", upload(OWN_SKILL, { fileContent: pdfOfSize(5 * 1024 * 1024 + 1) }));
+    expect(res.status).toBe(413);
+    expect(res.body?.code).toBe("TOO_LARGE");
+    expect(writesReachingFsm()).toEqual([]);
+  });
+
+  it.each([
+    ["a program renamed to cert.pdf", { fileName: "cert.pdf", type: "PDF", fileContent: b64(EXE) }],
+    ["a PNG named .pdf", { fileName: "scan.pdf", type: "PDF", fileContent: b64(PNG) }],
+    ["a PDF declared as PNG", { fileName: "a.png", type: "PNG", fileContent: PDF_B64 }],
+    ["a declared type that does not match", { fileName: "a.pdf", type: "JPEG", fileContent: PDF_B64 }],
+    ["a .docx", { fileName: "notes.docx", type: "PDF", fileContent: PDF_B64 }],
+    ["no file content", { fileName: "a.pdf", type: "PDF", fileContent: undefined }],
+    ["content that is not base64", { fileName: "a.pdf", type: "PDF", fileContent: "%PDF-1.4 not base64!" }],
+    ["an empty file", { fileName: "a.pdf", type: "PDF", fileContent: "" }],
+  ])("refuses %s with 403", async (_name, file) => {
+    const res = await send("POST", "data/v4/Attachment", upload(OWN_SKILL, file));
+    expect(res.status).toBe(403);
+    expect(res.body?.code).toBe("BAD_FILE");
+    expect(writesReachingFsm()).toEqual([]);
   });
 });

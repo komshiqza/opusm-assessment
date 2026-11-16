@@ -14,7 +14,8 @@ import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceSca
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
 import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
-import { effectiveStartDate, validateCertificateFile, validateValidity } from "@/lib/domain/validation";
+import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
+import { inspectCertificateFile } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import type { Assignment, AssignmentInput, Certificate, Person, ProficiencyScale, SkillDefinition } from "./types";
 
@@ -321,7 +322,7 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
 // --- Writes: certificates (Attachments) --------------------------------------------------
 
 export async function uploadCertificate(assignmentId: string, file: File): Promise<Certificate> {
-  const check = validateCertificateFile(file);
+  const check = await inspectCertificateFile(file);
   if (!check.ok) throw new Error(check.error);
   await assertOwnSkill(assignmentId);
   const created = await fsmCreate<FsmAttachment>("Attachment", {

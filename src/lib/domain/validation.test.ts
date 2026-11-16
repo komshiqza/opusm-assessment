@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CERTIFICATE_BYTES, effectiveStartDate, splitCertificateFiles, validateCertificateFile, validateSkillName, validateValidity } from "./validation";
+import { effectiveStartDate, validateSkillName, validateValidity } from "./validation";
 
 describe("validateValidity", () => {
   it.each([
@@ -38,55 +38,9 @@ describe("validateSkillName", () => {
   });
 });
 
-describe("validateCertificateFile", () => {
-  const file = (name: string, size: number, type = "") => ({ name, size, type });
-
-  it.each([
-    ["cert.pdf", "PDF"],
-    ["photo.JPG", "JPEG"],
-    ["photo.jpeg", "JPEG"],
-    ["scan.png", "PNG"],
-  ])("accepts %s as %s", (name, type) => {
-    expect(validateCertificateFile(file(name, 1000))).toEqual({ ok: true, type });
-  });
-
-  it("rejects other types", () => {
-    expect(validateCertificateFile(file("cert.docx", 1000))).toMatchObject({ ok: false });
-    expect(validateCertificateFile(file("noextension", 1000))).toMatchObject({ ok: false });
-  });
-
-  it("allows the brief's 5 MB (5,242,880 bytes) and refuses anything larger", () => {
-    expect(MAX_CERTIFICATE_BYTES).toBe(5 * 1024 * 1024);
-    expect(validateCertificateFile(file("a.pdf", 2 * 1024 * 1024))).toMatchObject({ ok: true });
-    expect(validateCertificateFile(file("a.pdf", 5 * 1024 * 1024 + 1))).toMatchObject({ ok: false, error: expect.stringMatching(/larger than 5 MB/) });
-  });
-
-  it("checks the limit on the original file size, inclusive", () => {
-    expect(validateCertificateFile(file("a.pdf", MAX_CERTIFICATE_BYTES))).toMatchObject({ ok: true });
-    expect(validateCertificateFile(file("a.pdf", MAX_CERTIFICATE_BYTES + 1))).toMatchObject({ ok: false });
-  });
-
-  it("rejects empty files", () => {
-    expect(validateCertificateFile(file("a.pdf", 0))).toMatchObject({ ok: false });
-  });
-});
-
 describe("effectiveStartDate", () => {
   it("uses today when 'valid from' is empty (FSM requires a start date)", () => {
     expect(effectiveStartDate(null, "2026-11-16")).toBe("2026-11-16");
     expect(effectiveStartDate("2025-01-01", "2026-11-16")).toBe("2025-01-01");
-  });
-});
-
-describe("splitCertificateFiles", () => {
-  it("keeps valid files in order and explains the others", () => {
-    const files = [
-      { name: "a.pdf", size: 10 },
-      { name: "notes.docx", size: 10 },
-      { name: "b.png", size: 10 },
-    ];
-    const { valid, problems } = splitCertificateFiles(files);
-    expect(valid.map((f) => f.name)).toEqual(["a.pdf", "b.png"]);
-    expect(problems).toEqual([expect.stringMatching(/^notes\.docx: only PDF, JPG and PNG/)]);
   });
 });

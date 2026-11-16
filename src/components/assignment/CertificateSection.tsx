@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { BusyIndicator, Button, FileUploader, Icon, Link, MessageStrip, Text, Title } from "@ui5/webcomponents-react";
 import { deleteCertificate, uploadCertificates } from "@/lib/skills/repository";
-import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/validation";
+import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import type { Certificate } from "@/lib/skills/types";
@@ -36,7 +36,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onBu
   const [inputKey, setInputKey] = useState(0);
 
   const upload = async (files: File[]) => {
-    const { valid, problems } = splitCertificateFiles(files);
+    const { valid, problems } = await splitCertificateFiles(files);
     if (valid.length) onBusyChange(true);
     const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`));
     setErrors([...problems, ...outcome.failed.map((f) => `${f.file.name}: ${f.error}`)]);

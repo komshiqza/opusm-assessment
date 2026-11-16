@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { Bar, BusyIndicator, Button, DatePicker, Dialog, FileUploader, Label, MessageStrip, Option, Select, Text } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, todayIso } from "@/lib/domain/status";
-import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, effectiveStartDate, splitCertificateFiles, validateValidity } from "@/lib/domain/validation";
+import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
+import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
 import {
   createAssignmentWithCertificates,
   deleteAssignment,
@@ -126,8 +127,8 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       if (outcome.failed.length === 0) toast("All certificates uploaded");
     });
 
-  const pickFiles = (files: File[]) => {
-    const { valid, problems } = splitCertificateFiles(files);
+  const pickFiles = async (files: File[]) => {
+    const { valid, problems } = await splitCertificateFiles(files);
     setPickProblems(problems);
     // No automatic de-duplication: two different files can share name and size. Every picked file is listed and can be removed.
     setPendingFiles((current) => [...current, ...valid]);
@@ -302,7 +303,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                     multiple
                     hideInput
                     disabled={locked}
-                    onChange={(e) => pickFiles(Array.from(e.detail.files ?? []))}
+                    onChange={(e) => void pickFiles(Array.from(e.detail.files ?? []))}
                   >
                     <Button icon="add" disabled={locked}>
                       Choose certificates

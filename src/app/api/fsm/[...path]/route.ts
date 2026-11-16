@@ -87,9 +87,10 @@ async function handle(req: Request, { params }: Params): Promise<Response> {
   if ("denied" in target) return error(403, target.denied, target.code);
 
   // Added for the assessment: per-record ownership check on the server (only own Tags/Scales,
-  // their Skills and those Skills' Attachments; any other write is refused). The allowlist above is unchanged.
-  const notOwn = await checkWriteOwnership(path, method, () => req.clone().json(), fsmOwnershipReader());
-  if (notOwn) return error(403, notOwn, "NOT_OWN");
+  // their Skills and those Skills' Attachments; certificate size and content; any other write is
+  // refused). The allowlist above is unchanged.
+  const refusal = await checkWriteOwnership(path, method, () => req.clone().json(), fsmOwnershipReader());
+  if (refusal) return error(refusal.status, refusal.message, refusal.code);
 
   const body = method === "GET" || method === "HEAD" ? undefined : await req.arrayBuffer();
   const contentType = req.headers.get("content-type") ?? "application/json";
