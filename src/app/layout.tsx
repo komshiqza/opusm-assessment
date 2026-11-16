@@ -15,11 +15,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* UI5 Web Components runtime configuration. Must exist before any component boots.
-            sap_horizon_auto follows the device light/dark setting (the "System" theme choice). */}
+            Light (sap_horizon) is the default; a saved dark choice is applied in ui5-setup before boot. */}
         <script
           data-ui5-config
           type="application/json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify({ theme: "sap_horizon_auto", animationMode: "minimal" }) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify({ theme: "sap_horizon", animationMode: "minimal" }) }}
         />
         <Script id="theme-boot" strategy="beforeInteractive">
           {THEME_BOOT_SCRIPT}

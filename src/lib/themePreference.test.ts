@@ -3,11 +3,11 @@ import { THEME_BOOT_SCRIPT, UI5_THEME, parseThemeChoice } from "./themePreferenc
 
 describe("theme choice", () => {
   it("maps each choice to an SAP theme", () => {
-    expect(UI5_THEME).toEqual({ system: "sap_horizon_auto", light: "sap_horizon", dark: "sap_horizon_dark" });
+    expect(UI5_THEME).toEqual({ light: "sap_horizon", dark: "sap_horizon_dark" });
   });
 
-  it("defaults to System for anything unknown", () => {
-    for (const raw of [null, "", "blue", "sap_horizon"]) expect(parseThemeChoice(raw)).toBe("system");
+  it("is Light unless dark was picked (an old saved \"system\" or junk counts as Light)", () => {
+    for (const raw of [null, "", "system", "blue", "sap_horizon_dark", "light"]) expect(parseThemeChoice(raw)).toBe("light");
     expect(parseThemeChoice("dark")).toBe("dark");
   });
 });
@@ -24,7 +24,7 @@ describe("storage (fresh module per test, as on a page load)", () => {
     const values = new Map<string, string>();
     fakeWindow({ getItem: (k) => values.get(k) ?? null, setItem: (k, v) => void values.set(k, v) });
     const store = await import("./themePreference");
-    expect(store.readThemeChoice()).toBe("system");
+    expect(store.readThemeChoice()).toBe("light");
     store.saveThemeChoice("dark");
     expect(store.readThemeChoice()).toBe("dark");
     expect(values.get("skill-management.theme")).toBe("dark");
@@ -36,9 +36,9 @@ describe("storage (fresh module per test, as on a page load)", () => {
     };
     fakeWindow({ getItem: blocked, setItem: blocked });
     const store = await import("./themePreference");
-    expect(store.readThemeChoice()).toBe("system");
-    expect(() => store.saveThemeChoice("light")).not.toThrow();
     expect(store.readThemeChoice()).toBe("light");
+    expect(() => store.saveThemeChoice("dark")).not.toThrow();
+    expect(store.readThemeChoice()).toBe("dark");
   });
 });
 
@@ -55,13 +55,14 @@ describe("head script (runs before the page paints)", () => {
     expect(runBootScript(() => "light")).toBe("light");
   });
 
-  it("follows the device when nothing valid is saved or storage is blocked", () => {
-    expect(runBootScript(() => null)).toBe("light dark");
-    expect(runBootScript(() => "blue")).toBe("light dark");
+  it("starts light when nothing valid is saved or storage is blocked", () => {
+    expect(runBootScript(() => null)).toBe("light");
+    expect(runBootScript(() => "system")).toBe("light");
+    expect(runBootScript(() => "blue")).toBe("light");
     expect(
       runBootScript(() => {
         throw new Error("SecurityError");
       }),
-    ).toBe("light dark");
+    ).toBe("light");
   });
 });

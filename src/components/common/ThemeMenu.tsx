@@ -2,13 +2,13 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Menu, MenuItem, MenuItemGroup } from "@ui5/webcomponents-react";
-import { THEME_LABELS, readThemeChoice, saveThemeChoice, subscribeThemeChoice, type ThemeChoice } from "@/lib/themePreference";
+import { DEFAULT_THEME, THEME_LABELS, readThemeChoice, saveThemeChoice, subscribeThemeChoice, type ThemeChoice } from "@/lib/themePreference";
 
-const CHOICES: ThemeChoice[] = ["system", "light", "dark"];
+const CHOICES: ThemeChoice[] = ["light", "dark"];
 
 /** The light/dark choice, opened from the ShellBar's "Theme" button. */
 export function ThemeMenu({ opener, onClose }: { opener: HTMLElement | null; onClose: () => void }) {
-  const choice = useSyncExternalStore(subscribeThemeChoice, readThemeChoice, () => "system" as const);
+  const choice = useSyncExternalStore(subscribeThemeChoice, readThemeChoice, () => DEFAULT_THEME);
   return (
     <Menu
       open={opener !== null}
