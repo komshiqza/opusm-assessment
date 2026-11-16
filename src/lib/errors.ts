@@ -4,7 +4,7 @@ import { FsmError } from "@/lib/fsm/client";
 export function toUserMessage(error: unknown): string {
   if (error instanceof FsmError) {
     if (error.message.startsWith("CA-198")) {
-      return `FSM rejected the file: it is larger than this FSM company allows for attachments (observed: 1 MB). (${error.message})`;
+      return `FSM rejected the file: it is larger than this FSM company allows for attachments. (${error.message})`;
     }
     const code = (error.data as { code?: string } | undefined)?.code;
     return `FSM error${error.status ? ` ${error.status}` : ""}${code ? ` (${code})` : ""}: ${error.message}`;
