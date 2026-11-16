@@ -91,7 +91,7 @@ export const en = {
   "matrix.statusUpcoming": "With a skill that starts later",
   "matrix.statusNone": "With a missing skill",
   "matrix.resetFilters": "Reset filters",
-  "matrix.bulk": "Assign to several…",
+  "matrix.bulk": "Bulk assign",
   "matrix.export": "Export CSV",
   "matrix.exportTooltip": "Download the rows and skill columns shown now as a CSV file for Excel",
   "matrix.show": "Show",

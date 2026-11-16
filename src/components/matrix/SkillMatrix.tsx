@@ -211,49 +211,6 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             {t("matrix.resetFilters")}
           </Button>
         )}
-        <Button design="Transparent" icon="add-employee" className={styles.export} onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
-          {t("matrix.bulk")}
-        </Button>
-        <Button
-          design="Transparent"
-          icon="excel-attachment"
-          className={styles.exportNext}
-          tooltip={t("matrix.exportTooltip")}
-          onClick={() =>
-            downloadCsv(
-              matrixCsv(
-                visiblePersons,
-                typeOf,
-                visibleSkills,
-                (personId, tagId) => assignmentByCell.get(cellKey(personId, tagId)),
-                (assignmentId) => certificatesBySkill.get(assignmentId)?.length ?? 0,
-                today,
-              ),
-              csvFileName(today),
-            )
-          }
-          disabled={visiblePersons.length === 0}
-        >
-          {t("matrix.export")}
-        </Button>
-      </div>
-
-      <div className={styles.showRow}>
-        <Label id="matrix-show-label" showColon>
-          {t("matrix.show")}
-        </Label>
-        <SegmentedButton
-          accessibleNameRef="matrix-show-label"
-          onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
-        >
-          <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
-            {extraCount ? t("matrix.techniciansPlus", { n: technicianCount, extra: extraCount }) : t("matrix.technicians", { n: technicianCount })}
-          </SegmentedButtonItem>
-          <SegmentedButtonItem data-key="all" selected={showAllRecords}>
-            {t("matrix.allRecords", { n: data.persons.length })}
-          </SegmentedButtonItem>
-        </SegmentedButton>
-        {showAllRecords && <Text className={styles.legend}>{t("matrix.allRecordsHint")}</Text>}
       </div>
 
       <div className={styles.summary} aria-live="polite">
@@ -273,6 +230,51 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           <Icon name="attachment" className={styles.chipIcon} /> {t("matrix.legend")} ·{" "}
           {isPhone ? t("matrix.legendPhone") : t("matrix.legendDesktop")}
         </span>
+      </div>
+
+      {/* Table toolbar (Fiori: filters above, the table's own actions in its toolbar): who is in the table on the left, actions on the right. */}
+      <div className={styles.tableToolbar}>
+        <Label id="matrix-show-label" showColon>
+          {t("matrix.show")}
+        </Label>
+        <SegmentedButton
+          accessibleNameRef="matrix-show-label"
+          onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
+        >
+          <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
+            {extraCount ? t("matrix.techniciansPlus", { n: technicianCount, extra: extraCount }) : t("matrix.technicians", { n: technicianCount })}
+          </SegmentedButtonItem>
+          <SegmentedButtonItem data-key="all" selected={showAllRecords}>
+            {t("matrix.allRecords", { n: data.persons.length })}
+          </SegmentedButtonItem>
+        </SegmentedButton>
+        {showAllRecords && <Text className={styles.legend}>{t("matrix.allRecordsHint")}</Text>}
+        <div className={styles.tableActions}>
+          <Button design="Transparent" icon="add-employee" onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
+            {t("matrix.bulk")}
+          </Button>
+          <Button
+            design="Transparent"
+            icon="excel-attachment"
+            tooltip={t("matrix.exportTooltip")}
+            onClick={() =>
+              downloadCsv(
+                matrixCsv(
+                  visiblePersons,
+                  typeOf,
+                  visibleSkills,
+                  (personId, tagId) => assignmentByCell.get(cellKey(personId, tagId)),
+                  (assignmentId) => certificatesBySkill.get(assignmentId)?.length ?? 0,
+                  today,
+                ),
+                csvFileName(today),
+              )
+            }
+            disabled={visiblePersons.length === 0}
+          >
+            {t("matrix.export")}
+          </Button>
+        </div>
       </div>
 
       {visiblePersons.length === 0 ? (

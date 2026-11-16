@@ -27,16 +27,6 @@
   align-self: flex-end;
 }
 
-/* Bulk assign and export sit at the end of the filter bar. */
-.export {
-  align-self: flex-end;
-  margin-left: auto;
-}
-
-.exportNext {
-  align-self: flex-end;
-}
-
 .summary {
   display: flex;
   flex-wrap: wrap;
@@ -314,11 +304,19 @@
   display: inline-flex;
 }
 
-.showRow {
+.tableToolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.75rem;
+}
+
+/* Bulk assign and export: the table's own actions, at the right end of its toolbar. */
+.tableActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-left: auto;
 }
 
 /* Phone: one card per person with the skills stacked */

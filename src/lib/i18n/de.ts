@@ -90,7 +90,7 @@ export const de: Record<MessageKey, string> = {
   "matrix.statusUpcoming": "Mit einer Qualifikation, die später beginnt",
   "matrix.statusNone": "Mit fehlender Qualifikation",
   "matrix.resetFilters": "Filter zurücksetzen",
-  "matrix.bulk": "Mehreren zuweisen…",
+  "matrix.bulk": "Mehrfach zuweisen",
   "matrix.export": "CSV-Export",
   "matrix.exportTooltip": "Aktuell angezeigte Zeilen und Qualifikationsspalten als CSV-Datei für Excel herunterladen",
   "matrix.show": "Anzeigen",
