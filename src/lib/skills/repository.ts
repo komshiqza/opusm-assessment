@@ -13,8 +13,8 @@ import { assertBulkOk, fileToBase64, fsmCreate, fsmDelete, fsmQuery, skillApi, s
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
-import { normalizeEndDate, OPEN_END_DATE } from "@/lib/domain/status";
-import { validateCertificateFile, validateValidity } from "@/lib/domain/validation";
+import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
+import { effectiveStartDate, validateCertificateFile, validateValidity } from "@/lib/domain/validation";
 import type { Assignment, AssignmentInput, Certificate, Person, ProficiencyScale, SkillDefinition } from "./types";
 
 /** One scale for all our skills. */
@@ -218,13 +218,19 @@ export async function deleteSkillDefinition(tagId: string): Promise<DeleteImpact
 
 // --- Writes: assignments (Skills) -------------------------------------------------------
 
-function assertValidInput(input: AssignmentInput) {
-  const error = validateValidity(input.startDate, input.endDate);
+/**
+ * The Skill Service requires a start date ("Start date is required"). An empty "valid from"
+ * therefore means "from today". Returns the dates that are actually sent.
+ */
+function toWritableDates(input: AssignmentInput): { startDate: string; endDate: string | null } {
+  const startDate = effectiveStartDate(input.startDate, todayIso());
+  const error = validateValidity(startDate, input.endDate);
   if (error) throw new Error(error);
+  return { startDate, endDate: input.endDate };
 }
 
 export async function createAssignment(tagId: string, personId: string, input: AssignmentInput): Promise<Assignment> {
-  assertValidInput(input);
+  const dates = toWritableDates(input);
   assertFsmId(personId);
   await assertOwnTag(tagId);
   const existing = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [
@@ -241,8 +247,8 @@ export async function createAssignment(tagId: string, personId: string, input: A
           tagId,
           technician: personId,
           proficiencyId: input.proficiencyId ?? undefined,
-          startDate: input.startDate ?? undefined,
-          endDate: input.endDate ?? undefined,
+          startDate: dates.startDate,
+          endDate: dates.endDate ?? undefined,
         },
       ],
     }),
@@ -251,14 +257,14 @@ export async function createAssignment(tagId: string, personId: string, input: A
 }
 
 export async function updateAssignment(assignmentId: string, input: AssignmentInput): Promise<void> {
-  assertValidInput(input);
+  const dates = toWritableDates(input);
   const { tagId } = await assertOwnSkill(assignmentId);
   await skillApi(`v1/tags/${tagId}/skills/${assignmentId}`, {
     method: "PATCH",
     body: {
       proficiencyId: input.proficiencyId,
-      startDate: input.startDate,
-      endDate: input.endDate ?? OPEN_END_DATE,
+      startDate: dates.startDate,
+      endDate: dates.endDate ?? OPEN_END_DATE,
     },
   });
 }

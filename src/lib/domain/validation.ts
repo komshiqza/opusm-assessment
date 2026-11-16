@@ -28,6 +28,11 @@ export function validateValidity(from: string | null, to: string | null): string
   return null;
 }
 
+/** The Skill Service needs a start date, so an empty "valid from" means today. */
+export function effectiveStartDate(from: string | null, today: string): string {
+  return from || today;
+}
+
 export function validateSkillName(displayName: string, existingDisplayNames: string[]): string | null {
   const name = displayName.trim();
   if (!name) return "Please enter a name.";

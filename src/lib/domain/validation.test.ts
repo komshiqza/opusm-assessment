@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CERTIFICATE_BYTES, validateCertificateFile, validateSkillName, validateValidity } from "./validation";
+import { MAX_CERTIFICATE_BYTES, effectiveStartDate, validateCertificateFile, validateSkillName, validateValidity } from "./validation";
 
 describe("validateValidity", () => {
   it.each([
@@ -62,5 +62,12 @@ describe("validateCertificateFile", () => {
 
   it("rejects empty files", () => {
     expect(validateCertificateFile(file("a.pdf", 0))).toMatchObject({ ok: false });
+  });
+});
+
+describe("effectiveStartDate", () => {
+  it("uses today when 'valid from' is empty (FSM requires a start date)", () => {
+    expect(effectiveStartDate(null, "2026-11-16")).toBe("2026-11-16");
+    expect(effectiveStartDate("2025-01-01", "2026-11-16")).toBe("2025-01-01");
   });
 });
