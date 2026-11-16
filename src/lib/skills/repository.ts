@@ -34,12 +34,13 @@ const IN_CHUNK = 100;
  * human), and the active Person records, which are matched to them by refId (see src/lib/domain/persons.ts).
  */
 export async function loadPersons(): Promise<Person[]> {
+  // All Person records, also inactive ones: their skills still belong to the person (and count as "already has it").
   const [unified, records] = await Promise.all([
     fsmQuery<{ u: UnifiedPersonFields }>(
       "SELECT u.id, u.refId, u.firstName, u.lastName, u.userName, u.jobTitle FROM UnifiedPerson u WHERE u.inactive = false",
       ["UnifiedPerson"],
     ),
-    fsmQuery<{ p: Pick<FsmPerson, "id" | "type"> & { refId?: string | null } }>("SELECT p.id, p.refId, p.type FROM Person p WHERE p.inactive = false", ["Person"]),
+    fsmQuery<{ p: Pick<FsmPerson, "id" | "type" | "inactive"> & { refId?: string | null } }>("SELECT p.id, p.refId, p.type, p.inactive FROM Person p", ["Person"]),
   ]);
   return buildPeople(
     unified.map(({ u }) => ({
@@ -48,7 +49,7 @@ export async function loadPersons(): Promise<Person[]> {
       name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.userName || "Unnamed person",
       jobTitle: u.jobTitle ?? null,
     })),
-    records.map(({ p }) => ({ id: p.id, refId: p.refId ?? null, type: p.type ?? null })),
+    records.map(({ p }) => ({ id: p.id, refId: p.refId ?? null, type: p.type ?? null, inactive: Boolean(p.inactive) })),
   );
 }
 

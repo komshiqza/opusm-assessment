@@ -17,7 +17,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useToast } from "@/components/common/Toast";
 import { STATUS_DISPLAY, statusText } from "@/components/matrix/statusDisplay";
 import { CertificateSection } from "./CertificateSection";
-import { closeAfterRefresh, initialLevelId, levelChoices, levelToSend, primaryAction } from "./assignmentDialogState";
+import { closeAfterRefresh, initialLevelId, levelChoices, levelToSend, primaryAction, pinnedRecordId } from "./assignmentDialogState";
 import { EMPTY_RESULTS, applyOutcome, createResultLine, type UploadResults } from "./uploadResults";
 import { ResultStrip, UploadResultNotes } from "./UploadResultNotes";
 import styles from "./AssignmentDialog.module.css";
@@ -35,9 +35,9 @@ interface AssignmentDialogProps {
 /** Assign a skill, change level and validity, remove it, and manage its certificates. */
 export function AssignmentDialog({ person, definition, state, recordId, onClose }: AssignmentDialogProps) {
   const toast = useToast();
-  const listedAssignment = recordId
-    ? state.assignmentByRecord.get(cellKey(recordId, definition.id))
-    : state.assignmentByCell.get(cellKey(person.id, definition.id));
+  /** Fixed when the dialog opens, so a reload can never switch it to another record's assignment. */
+  const [record] = useState(() => pinnedRecordId(recordId, state.assignmentByCell.get(cellKey(person.id, definition.id)), person.id));
+  const listedAssignment = state.assignmentByRecord.get(cellKey(record, definition.id));
   /** Set when this dialog removed the assignment; the list may still show it if the reload failed. */
   const [removed, setRemoved] = useState(false);
   const assignment = removed ? undefined : listedAssignment;

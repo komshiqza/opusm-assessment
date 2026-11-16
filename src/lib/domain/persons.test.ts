@@ -55,6 +55,25 @@ describe("buildPeople (one row per real person, from UnifiedPerson)", () => {
   });
 });
 
+describe("inactive Person records of an active person", () => {
+  const rec = (id: string, refId: string, type: string, inactive: boolean) => ({ id, refId, type, inactive });
+
+  it("keeps an inactive linked record (its skills stay visible and count as 'already has it')", () => {
+    const [person] = buildPeople([unified("U-T", "tom", "Tom")], [rec("tom", "tom", "ERPUSER", false), rec("tom-emp", "tom", "EMPLOYEE", true)]);
+    expect(person.records.map((r) => r.id)).toEqual(["tom", "tom-emp"]);
+    expect(placeAssignments([person], [{ id: "S1", personId: "tom-emp", tagId: "AID" }]).byCell.get("tom|AID")?.id).toBe("S1");
+  });
+
+  it("never picks an inactive record as the main one (new assignments go there)", () => {
+    const [person] = buildPeople([unified("U-V", "vera", "Vera")], [rec("vera", "vera", "ERPUSER", true), rec("vera-emp", "vera", "EMPLOYEE", false)]);
+    expect(person.id).toBe("vera-emp");
+  });
+
+  it("leaves out a person whose records are all inactive (nothing could be written)", () => {
+    expect(buildPeople([unified("U-W", "will", "Will")], [rec("will", "will", "ERPUSER", true)])).toEqual([]);
+  });
+});
+
 describe("placeAssignments (each assignment in its person's cell)", () => {
   const a = (id: string, personId: string, tagId = "AID") => ({ id, personId, tagId });
 

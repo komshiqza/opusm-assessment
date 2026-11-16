@@ -22,14 +22,17 @@ export interface UnifiedPersonRow {
 
 export interface PersonRecordRow extends PersonRecord {
   refId: string | null;
+  /** An inactive record still belongs to the person (its skills stay visible), but is never the main one. */
+  inactive?: boolean;
 }
 
 /** `${personId}|${tagId}`: one cell of the matrix (person = the main record's id). */
 export const cellKey = (personId: string, tagId: string) => `${personId}|${tagId}`;
 
-/** The main record: ERPUSER, else the one that references itself, else the first. */
-function mainRecord(records: PersonRecordRow[], refId: string): PersonRecordRow {
-  return records.find((r) => r.type === "ERPUSER") ?? records.find((r) => r.id === refId) ?? records[0];
+/** The main record, among the active ones: ERPUSER, else the one that references itself, else the first. */
+function mainRecord(records: PersonRecordRow[], refId: string): PersonRecordRow | undefined {
+  const active = records.filter((r) => !r.inactive);
+  return active.find((r) => r.type === "ERPUSER") ?? active.find((r) => r.id === refId) ?? active[0];
 }
 
 /** Active UnifiedPerson rows with their Person records (by refId), main record first, sorted by name. */
@@ -41,8 +44,8 @@ export function buildPeople(unified: UnifiedPersonRow[], records: PersonRecordRo
     if (u.inactive) continue;
     const refId = u.refId ?? u.id;
     const own = byRefId.get(refId) ?? [];
-    if (own.length === 0) continue; // nothing could be shown or written for this person
     const main = mainRecord(own, refId);
+    if (!main) continue; // no active record: nothing could be written for this person
     const ordered = [main, ...own.filter((r) => r !== main)].map(({ id, type }) => ({ id, type }));
     people.push({ id: main.id, name: u.name, jobTitle: u.jobTitle?.trim() || null, refId, records: ordered });
   }

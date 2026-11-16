@@ -1,6 +1,15 @@
 import { t } from "@/lib/i18n/t";
 
 /**
+ * The Person record the dialog works on, fixed when it opens: the record asked for, else the record of
+ * the assignment the cell shows, else (a new assignment) the person's main record. After a reload the
+ * dialog keeps to this record and never switches to another record's assignment of the same skill.
+ */
+export function pinnedRecordId(recordId: string | undefined, shown: { personId: string } | undefined, mainRecordId: string): string {
+  return recordId ?? shown?.personId ?? mainRecordId;
+}
+
+/**
  * The main button of the assignment dialog. The list (and so `listed`) can be out of date when a
  * reload after a write failed, so the dialog also remembers what it did itself.
  */

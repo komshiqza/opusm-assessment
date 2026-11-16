@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeAfterRefresh, initialLevelId, levelChoices, levelToSend, primaryAction } from "./assignmentDialogState";
+import { closeAfterRefresh, initialLevelId, levelChoices, levelToSend, pinnedRecordId, primaryAction } from "./assignmentDialogState";
 
 describe("primaryAction (the main button of the assignment dialog)", () => {
   it("offers Assign for a person without the skill", () => {
@@ -101,5 +101,19 @@ describe("closeAfterRefresh (Refresh list after a save whose reload failed)", ()
   it("stays open when the dialog has more to do", () => {
     expect(closeAfterRefresh({ close: false }, 0)).toBe(false);
     expect(closeAfterRefresh(null, 0)).toBe(false);
+  });
+});
+
+describe("pinnedRecordId (the Person record the dialog works on, fixed when it opens)", () => {
+  it("is the record that was asked for (e.g. a second assignment opened from the person view)", () => {
+    expect(pinnedRecordId("anna-emp", { personId: "anna" }, "anna")).toBe("anna-emp");
+  });
+
+  it("is the record of the assignment the cell shows when the dialog opens", () => {
+    expect(pinnedRecordId(undefined, { personId: "anna-emp" }, "anna")).toBe("anna-emp");
+  });
+
+  it("is the person's main record for a new assignment", () => {
+    expect(pinnedRecordId(undefined, undefined, "anna")).toBe("anna");
   });
 });
