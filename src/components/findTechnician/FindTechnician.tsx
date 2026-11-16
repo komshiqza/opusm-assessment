@@ -6,6 +6,7 @@ import {
   Icon,
   IllustratedMessage,
   Label,
+  Link,
   MultiComboBox,
   MultiComboBoxItem,
   Option,
@@ -37,13 +38,15 @@ const ANY_LEVEL = "any";
 interface FindTechnicianProps {
   state: SkillDataState;
   onOpen: (person: Person, definition: SkillDefinition) => void;
+  /** Shows all skills and certificates of one person. */
+  onOpenPerson: (person: Person) => void;
 }
 
 /**
  * "Who can I send to this job on that day?" Works only on data the app already loaded:
  * no extra FSM calls, and no FSM jobs or requirements are read or written.
  */
-export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
+export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianProps) {
   const today = useToday();
   const [skillIds, setSkillIds] = usePageState<string[]>("find.skillIds", []);
   /** "any" or a proficiency id. Not "": UI5's Select shows an empty value as "nothing selected". */
@@ -111,7 +114,9 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
   const personCell = (p: Person, technician: boolean) => (
     <TableCell>
       <span className={styles.person}>
-        <b>{p.name}</b>
+        <Link onClick={() => onOpenPerson(p)} accessibleName={`All skills of ${p.name}`} className={styles.personLink}>
+          {p.name}
+        </Link>
         <span className={styles.muted}>{[p.jobTitle, needsType.has(p.id) ? formatPersonType(p.type) : ""].filter(Boolean).join(" · ")}</span>
         {!technician && <NoJobTitleTag />}
       </span>

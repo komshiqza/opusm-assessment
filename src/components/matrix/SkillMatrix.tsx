@@ -7,6 +7,7 @@ import {
   IllustratedMessage,
   Input,
   Label,
+  Link,
   MultiComboBox,
   MultiComboBoxItem,
   Option,
@@ -38,10 +39,12 @@ const COUNTER_DESIGN = { expiring: "Attention", expired: "Negative", valid: "Pos
 interface SkillMatrixProps {
   state: SkillDataState;
   onOpenCell: (person: Person, definition: SkillDefinition) => void;
+  /** Shows all skills and certificates of one person. */
+  onOpenPerson: (person: Person) => void;
   onGoToCatalogue: () => void;
 }
 
-export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixProps) {
+export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }: SkillMatrixProps) {
   const { data, assignmentByCell, certificatesBySkill } = state;
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
@@ -246,7 +249,9 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
           {visiblePersons.map((p) => (
             <li key={p.id} className={styles.card}>
               <div className={styles.cardHead}>
-                <span className={styles.personName}>{p.name}</span>
+                <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={`All skills of ${p.name}`}>
+                  {p.name}
+                </Link>
                 <span className={styles.personMeta}>{[p.jobTitle, typeOf(p)].filter(Boolean).join(" · ")}</span>
               </div>
               <ul className={styles.cardSkills}>
@@ -308,7 +313,9 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
                 {visiblePersons.map((p) => (
                   <tr key={p.id}>
                     <th scope="row" className={styles.personCell}>
-                      <span className={styles.personName}>{p.name}</span>
+                      <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={`All skills of ${p.name}`}>
+                        {p.name}
+                      </Link>
                       <span className={styles.personMeta}>
                         {/* The job title is hidden below 1024 px; the record type (when shown) keeps linked records apart. */}
                         {p.jobTitle && (

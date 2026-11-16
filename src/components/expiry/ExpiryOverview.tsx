@@ -30,10 +30,12 @@ const WINDOWS = [30, 60, 90, 180, 365];
 interface ExpiryOverviewProps {
   state: SkillDataState;
   onOpen: (person: Person, definition: SkillDefinition) => void;
+  /** Shows all skills and certificates of one person. */
+  onOpenPerson: (person: Person) => void;
 }
 
 /** Everything that ends within the next N days (and optionally what has already expired), soonest first. */
-export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
+export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewProps) {
   const [days, setDays] = usePageState("expiry.days", 30);
   const [includeExpired, setIncludeExpired] = usePageState("expiry.includeExpired", true);
   const today = useToday();
@@ -115,7 +117,9 @@ export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
                 </TableCell>
                 <TableCell>
                   <Text>
-                    <b>{person.name}</b>
+                    <Link onClick={() => onOpenPerson(person)} accessibleName={`All skills of ${person.name}`} style={{ fontWeight: "bold" }}>
+                      {person.name}
+                    </Link>
                     {needsType.has(person.id) ? ` · ${formatPersonType(person.type)}` : ""}
                   </Text>
                 </TableCell>

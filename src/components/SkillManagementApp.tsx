@@ -32,6 +32,7 @@ import { ThemeMenu, useThemeMenu } from "./common/ThemeMenu";
 import { SkillMatrix } from "./matrix/SkillMatrix";
 import { SkillCatalog } from "./catalog/SkillCatalog";
 import { AssignmentDialog } from "./assignment/AssignmentDialog";
+import { PersonDialog } from "./person/PersonDialog";
 import { ExpiryOverview } from "./expiry/ExpiryOverview";
 import { FindTechnician } from "./findTechnician/FindTechnician";
 import styles from "./SkillManagementApp.module.css";
@@ -58,6 +59,8 @@ export function SkillManagementApp() {
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
   const tab = pickedTab ?? order[0];
   const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
+  /** The person whose skills are shown (the assignment dialog can open on top of it). */
+  const [personShown, setPersonShown] = useState<Person | null>(null);
 
   /** After a move the strip is rebuilt; put keyboard focus back on the moved tab. */
   const focusAfterMove = useRef<TabKey | null>(null);
@@ -81,9 +84,9 @@ export function SkillManagementApp() {
   }, [order]);
 
   const content: Record<TabKey, ReactNode> = {
-    matrix: <SkillMatrix state={state} onOpenCell={openCell} onGoToCatalogue={() => setTab("catalogue")} />,
-    expiry: <ExpiryOverview state={state} onOpen={openCell} />,
-    find: <FindTechnician state={state} onOpen={openCell} />,
+    matrix: <SkillMatrix state={state} onOpenCell={openCell} onOpenPerson={setPersonShown} onGoToCatalogue={() => setTab("catalogue")} />,
+    expiry: <ExpiryOverview state={state} onOpen={openCell} onOpenPerson={setPersonShown} />,
+    find: <FindTechnician state={state} onOpen={openCell} onOpenPerson={setPersonShown} />,
     catalogue: <SkillCatalog state={state} />,
   };
 
@@ -195,6 +198,7 @@ export function SkillManagementApp() {
         )}
       </main>
 
+      {personShown && <PersonDialog person={personShown} state={state} onOpenCell={openCell} onClose={() => setPersonShown(null)} />}
       {cell && <AssignmentDialog key={`${cell.person.id}|${cell.definition.id}`} {...cell} state={state} onClose={() => setCell(null)} />}
     </ToastProvider>
   );
