@@ -198,18 +198,49 @@ export async function getDeleteImpact(tagId: string): Promise<DeleteImpact & { s
 /**
  * Deletes a skill definition including its assignments and their certificates
  * (certificates → assignments → tag). FSM itself refuses to delete a Tag that still has Skills.
- * Stops at the first failure; what was deleted until then stays deleted.
+ * Stops at the first failure and reports what was already deleted (that part cannot be undone).
  */
 export async function deleteSkillDefinition(tagId: string): Promise<DeleteImpact> {
   await assertOwnTag(tagId);
   // Skills of an own tag are own skills, and their attachments are own attachments.
   const { skillIds, certificateIds } = await getDeleteImpact(tagId);
-  for (const id of certificateIds) await fsmDelete("Attachment", id);
-  if (skillIds.length) {
-    assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) }));
+  const done: DeleteImpact = { assignments: 0, certificates: 0 };
+  try {
+    for (const id of certificateIds) {
+      await fsmDelete("Attachment", id);
+      done.certificates++;
+    }
+    if (skillIds.length) {
+      assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) }));
+      done.assignments = skillIds.length;
+      done.certificates += await deleteLateCertificates(skillIds);
+    }
+    assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
+    return done;
+  } catch (e) {
+    throw withProgress(e, done);
   }
-  assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
-  return { assignments: skillIds.length, certificates: certificateIds.length };
+}
+
+/**
+ * A certificate uploaded (e.g. from another browser tab) after we listed the certificates but
+ * before the skill was deleted would be left without its skill. One more look catches it.
+ */
+async function deleteLateCertificates(skillIds: string[]): Promise<number> {
+  const late = await loadCertificates(skillIds);
+  for (const c of late) await fsmDelete("Attachment", c.id);
+  return late.length;
+}
+
+/** Adds "already deleted: …" to an error from a cascade that stopped half-way. */
+function withProgress(error: unknown, done: DeleteImpact): unknown {
+  if (!done.assignments && !done.certificates) return error;
+  const parts = [
+    done.certificates ? `${done.certificates} certificate${done.certificates > 1 ? "s" : ""}` : "",
+    done.assignments ? `${done.assignments} assignment${done.assignments > 1 ? "s" : ""}` : "",
+  ].filter(Boolean);
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(`${message} Already deleted before the error: ${parts.join(" and ")}. Reload and try again to finish.`);
 }
 
 // --- Writes: assignments (Skills) -------------------------------------------------------
@@ -268,9 +299,18 @@ export async function updateAssignment(assignmentId: string, input: AssignmentIn
 /** Removes an assignment and its certificates (certificates first, so none are left orphaned). */
 export async function deleteAssignment(assignmentId: string): Promise<void> {
   await assertOwnSkill(assignmentId);
-  const certificates = await loadCertificates([assignmentId]);
-  for (const c of certificates) await fsmDelete("Attachment", c.id);
-  assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: [{ id: assignmentId }] }));
+  const done: DeleteImpact = { assignments: 0, certificates: 0 };
+  try {
+    for (const c of await loadCertificates([assignmentId])) {
+      await fsmDelete("Attachment", c.id);
+      done.certificates++;
+    }
+    assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: [{ id: assignmentId }] }));
+    done.assignments = 1;
+    await deleteLateCertificates([assignmentId]);
+  } catch (e) {
+    throw withProgress(e, done);
+  }
 }
 
 // --- Writes: certificates (Attachments) --------------------------------------------------

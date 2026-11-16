@@ -2,7 +2,13 @@
 import { OPEN_END_DATE } from "./status";
 
 export const MAX_SKILL_NAME_LENGTH = 100;
-export const MAX_CERTIFICATE_BYTES = 5 * 1024 * 1024;
+/**
+ * The brief allows up to 5 MB, but this FSM company rejects attachments above exactly 1 MiB
+ * (CA-198, measured: 1,048,576 bytes pass, one byte more fails). We enforce the stricter limit
+ * before uploading, so the user is not sent into a guaranteed failure.
+ */
+export const MAX_CERTIFICATE_BYTES = 1024 * 1024;
+export const MAX_CERTIFICATE_LABEL = "1 MB";
 
 /** File extension → FSM `Attachment.type` (upper-case; `.jpg` is stored as JPEG). */
 const CERTIFICATE_TYPES: Record<string, string> = {
@@ -53,7 +59,7 @@ export function validateCertificateFile(file: { name: string; size: number }): C
   if (file.size === 0) return { ok: false, error: `${file.name}: the file is empty.` };
   if (file.size > MAX_CERTIFICATE_BYTES) {
     const mb = (file.size / 1024 / 1024).toFixed(1);
-    return { ok: false, error: `${file.name}: ${mb} MB is larger than the 5 MB limit.` };
+    return { ok: false, error: `${file.name}: ${mb} MB is larger than ${MAX_CERTIFICATE_LABEL}, the attachment limit of this FSM company.` };
   }
   return { ok: true, type };
 }

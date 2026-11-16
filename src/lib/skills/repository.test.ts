@@ -34,10 +34,14 @@ interface Call {
 }
 
 let calls: Call[];
+/** Attachments deleted through the fake, so later queries no longer return them (like real FSM). */
+let deletedAttachments: Set<string>;
 /** Fake FSM: answers a query by looking at the SQL; everything else via `writeAnswers`. */
 let queryAnswer: (sql: string) => unknown[];
 let searchAnswer: (path: string, filter: { field: string; value: unknown }[]) => unknown[];
 let attachmentAnswer: unknown = null;
+/** Answer of bulk (v2) writes; default: every item succeeded. */
+let bulkAnswer: ((path: string, method: string, body: unknown) => { hasErrors: boolean; results: unknown[] } | null) = () => null;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -45,9 +49,11 @@ function json(data: unknown, status = 200) {
 
 beforeEach(() => {
   calls = [];
+  deletedAttachments = new Set();
   queryAnswer = () => [];
   searchAnswer = () => [];
   attachmentAnswer = null;
+  bulkAnswer = () => null;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input, "http://localhost");
     const method = (init.method ?? "GET").toUpperCase();
@@ -55,13 +61,19 @@ beforeEach(() => {
     const path = url.pathname.replace("/api/fsm/", "");
     calls.push({ method, path, body });
 
-    if (path === "query/v1") return json({ data: queryAnswer(body.query), lastPage: 1 });
+    if (path.startsWith("data/v4/Attachment/") && method === "DELETE") deletedAttachments.add(path.split("/")[3]);
+    if (path === "query/v1") {
+      const rows = queryAnswer(body.query).filter((r) => !deletedAttachments.has((r as { a?: { id: string } }).a?.id ?? ""));
+      return json({ data: rows, lastPage: 1 });
+    }
     if (path.endsWith("/search")) return json({ content: searchAnswer(path, body.filter ?? []), last: true, totalElements: 0 });
     if (path.startsWith("data/v4/Attachment/") && method === "GET") {
       return attachmentAnswer ? json({ data: [{ attachment: attachmentAnswer }] }) : json({ error: "not found" }, 404);
     }
     if (path === "skill/v1/scales" && method === "POST") return json("EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE");
-    if (path.startsWith("skill/v2/")) return json({ hasErrors: false, results: [{ status: 200, resource: { id: SKILL, ...body?.[0] } }] }, 207);
+    if (path.startsWith("skill/v2/")) {
+      return json(bulkAnswer(path, method, body) ?? { hasErrors: false, results: [{ status: 200, resource: { id: SKILL, ...body?.[0] } }] }, 207);
+    }
     if (path.startsWith("data/v4/Attachment") && method === "POST") {
       return json({ data: [{ attachment: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] });
     }
@@ -147,6 +159,45 @@ describe("own data", () => {
       "DELETE skill/v2/skills",
       "DELETE skill/v2/tags",
     ]);
+  });
+
+  it("removing an assignment also deletes a certificate that was uploaded while the removal ran", async () => {
+    searchAnswer = skillOfTag("komshiqza::Welding");
+    let skillDeleted = false;
+    const LATE = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+    bulkAnswer = (path, method) => {
+      if (path === "skill/v2/skills" && method === "DELETE") skillDeleted = true;
+      return null;
+    };
+    // Before the skill is deleted FSM lists one certificate; afterwards a second one shows up (late upload).
+    queryAnswer = (sql) => {
+      if (!sql.includes("FROM Attachment a WHERE")) return [];
+      const cert = (id: string) => ({ a: { id, fileName: `${id}.pdf`, type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } });
+      return skillDeleted ? [cert(LATE)] : [cert(ATTACHMENT)];
+    };
+
+    await deleteAssignment(SKILL);
+    expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([
+      `DELETE data/v4/Attachment/${ATTACHMENT}`,
+      "DELETE skill/v2/skills",
+      `DELETE data/v4/Attachment/${LATE}`,
+    ]);
+  });
+
+  it("reports what was already deleted when a cascade fails half-way", async () => {
+    searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
+      return [];
+    };
+    queryAnswer = (sql) =>
+      sql.includes("FROM Attachment a WHERE") ? [{ a: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] : [];
+    bulkAnswer = (path) =>
+      path === "skill/v2/skills" ? { hasErrors: true, results: [{ status: 500, error: { detail: "Simulated FSM failure" } }] } : null;
+
+    await expect(deleteSkillDefinition(OWN_TAG)).rejects.toThrow(/Simulated FSM failure.*1 certificate/);
+    // the tag itself was not touched after the failure
+    expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([`DELETE data/v4/Attachment/${ATTACHMENT}`, "DELETE skill/v2/skills"]);
   });
 
   it("deletes an own certificate with exactly one request", async () => {

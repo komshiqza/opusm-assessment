@@ -116,6 +116,7 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
       {dialog?.kind === "delete" && (
         <DeleteSkillDialog
           skill={dialog.skill}
+          reload={state.reload}
           onClose={() => setDialog(null)}
           onDeleted={async (impact) => {
             await state.reload();

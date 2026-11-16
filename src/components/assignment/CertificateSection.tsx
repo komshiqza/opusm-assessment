@@ -4,7 +4,7 @@ import { useState } from "react";
 import { BusyIndicator, Button, FileUploader, Icon, Link, MessageStrip, Text, Title } from "@ui5/webcomponents-react";
 import { attachmentContentUrl } from "@/lib/fsm/client";
 import { deleteCertificate, uploadCertificate } from "@/lib/skills/repository";
-import { CERTIFICATE_ACCEPT, validateCertificateFile } from "@/lib/domain/validation";
+import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, validateCertificateFile } from "@/lib/domain/validation";
 import { toUserMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import type { Certificate } from "@/lib/skills/types";
@@ -17,6 +17,8 @@ interface CertificateSectionProps {
   assignmentId: string;
   certificates: Certificate[];
   onChanged: () => Promise<void>;
+  /** Tells the dialog that uploads are running, so it can block removing the assignment meanwhile. */
+  onBusyChange: (busy: boolean) => void;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -24,7 +26,7 @@ const TYPE_ICON: Record<string, string> = {
   JPEG: "attachment-photo",
   PNG: "attachment-photo",
 };
-export function CertificateSection({ assignmentId, certificates, onChanged }: CertificateSectionProps) {
+export function CertificateSection({ assignmentId, certificates, onChanged, onBusyChange }: CertificateSectionProps) {
   const toast = useToast();
   const [progress, setProgress] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -41,6 +43,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged }: Ce
       return check.ok;
     });
     let uploaded = 0;
+    if (valid.length) onBusyChange(true);
     for (const [i, file] of valid.entries()) {
       setProgress(`Uploading ${file.name} (${i + 1} of ${valid.length})…`);
       try {
@@ -58,6 +61,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged }: Ce
     }
     setProgress(null);
     setInputKey((k) => k + 1);
+    onBusyChange(false);
   };
 
   return (
@@ -115,7 +119,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged }: Ce
           </Button>
         </FileUploader>
         {progress && <BusyIndicator active delay={0} size="S" />}
-        <Text className={styles.muted}>{progress ?? "PDF, JPG or PNG, max. 5 MB each"}</Text>
+        <Text className={styles.muted}>{progress ?? `PDF, JPG or PNG, max. ${MAX_CERTIFICATE_LABEL} each`}</Text>
       </div>
 
       {errors.length > 0 && (
@@ -144,8 +148,11 @@ export function CertificateSection({ assignmentId, certificates, onChanged }: Ce
         onClose={() => setToDelete(null)}
         onConfirm={async () => {
           if (!toDelete) return;
-          await deleteCertificate(toDelete.id);
-          await onChanged();
+          try {
+            await deleteCertificate(toDelete.id);
+          } finally {
+            await onChanged(); // also after a failure: show what FSM really has now
+          }
           toast("Certificate deleted");
         }}
       >

@@ -38,6 +38,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const [error, setError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  /** Certificate uploads running: the assignment must not be removed or the dialog closed meanwhile. */
+  const [uploading, setUploading] = useState(false);
+  const locked = busy || uploading;
 
   // The picker's value is always in valueFormat (YYYY-MM-DD) or, if the user typed nonsense, that text.
   // Our own validation decides; the picker's `valid` flag is unreliable with a custom displayFormat.
@@ -76,7 +79,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       <Dialog
         open
         headerText={assignment ? `${definition.name}: ${person.name}` : `Assign ${definition.name}`}
-        onBeforeClose={(e) => busy && e.preventDefault()}
+        onBeforeClose={(e) => locked && e.preventDefault()}
         onClose={onClose}
         className={styles.dialog}
         footer={
@@ -84,17 +87,17 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             design="Footer"
             startContent={
               assignment && (
-                <Button design="Transparent" icon="delete" onClick={() => setConfirmRemove(true)} disabled={busy}>
+                <Button design="Transparent" icon="delete" onClick={() => setConfirmRemove(true)} disabled={locked}>
                   Remove assignment
                 </Button>
               )
             }
             endContent={
               <>
-                <Button design="Emphasized" onClick={save} disabled={busy || Boolean(dateError)}>
+                <Button design="Emphasized" onClick={save} disabled={locked || Boolean(dateError)}>
                   {assignment ? "Save" : "Assign"}
                 </Button>
-                <Button design="Transparent" onClick={onClose} disabled={busy}>
+                <Button design="Transparent" onClick={onClose} disabled={locked}>
                   {justCreated ? "Done" : "Cancel"}
                 </Button>
               </>
@@ -186,7 +189,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             )}
 
             {assignment ? (
-              <CertificateSection assignmentId={assignment.id} certificates={certificates} onChanged={state.reload} />
+              <CertificateSection assignmentId={assignment.id} certificates={certificates} onChanged={state.reload} onBusyChange={setUploading} />
             ) : (
               <Text className={styles.muted}>You can add certificates after the skill is assigned.</Text>
             )}
@@ -201,7 +204,12 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
           confirmText="Remove"
           onClose={() => setConfirmRemove(false)}
           onConfirm={async () => {
-            await deleteAssignment(assignment.id);
+            try {
+              await deleteAssignment(assignment.id);
+            } catch (e) {
+              await state.reload(); // part of it may be deleted already: show what FSM really has now
+              throw e;
+            }
             await state.reload();
             toast(`${definition.name} removed from ${person.name}`);
             onClose();

@@ -10,6 +10,8 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 interface DeleteSkillDialogProps {
   skill: SkillDefinition;
   onDeleted: (impact: DeleteImpact) => Promise<void>;
+  /** Reloads the data; also used after a failed delete, which may have removed a part already. */
+  reload: () => Promise<void>;
   onClose: () => void;
 }
 
@@ -18,7 +20,7 @@ interface DeleteSkillDialogProps {
  * will be removed (counted fresh from FSM), and on confirmation delete certificates, assignments
  * and the skill definition, in that order.
  */
-export function DeleteSkillDialog({ skill, onDeleted, onClose }: DeleteSkillDialogProps) {
+export function DeleteSkillDialog({ skill, onDeleted, reload, onClose }: DeleteSkillDialogProps) {
   const [impact, setImpact] = useState<DeleteImpact | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -45,7 +47,13 @@ export function DeleteSkillDialog({ skill, onDeleted, onClose }: DeleteSkillDial
       confirmDisabled={!impact}
       onClose={onClose}
       onConfirm={async () => {
-        const result = await deleteSkillDefinition(skill.id);
+        let result: DeleteImpact;
+        try {
+          result = await deleteSkillDefinition(skill.id);
+        } catch (e) {
+          await reload();
+          throw e;
+        }
         await onDeleted(result);
       }}
     >

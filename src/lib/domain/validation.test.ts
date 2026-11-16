@@ -55,7 +55,12 @@ describe("validateCertificateFile", () => {
     expect(validateCertificateFile(file("noextension", 1000))).toMatchObject({ ok: false });
   });
 
-  it("checks the 5 MB limit on the original file size", () => {
+  it("rejects files above the 1 MB FSM limit of this company (2 MB is within the brief's 5 MB, but FSM refuses it)", () => {
+    expect(MAX_CERTIFICATE_BYTES).toBe(1024 * 1024);
+    expect(validateCertificateFile(file("a.pdf", 2 * 1024 * 1024))).toMatchObject({ ok: false });
+  });
+
+  it("checks the limit on the original file size, inclusive", () => {
     expect(validateCertificateFile(file("a.pdf", MAX_CERTIFICATE_BYTES))).toMatchObject({ ok: true });
     expect(validateCertificateFile(file("a.pdf", MAX_CERTIFICATE_BYTES + 1))).toMatchObject({ ok: false });
   });
