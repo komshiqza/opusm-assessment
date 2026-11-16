@@ -33,8 +33,8 @@ describe("csvCell (Excel-safe cells)", () => {
     expect(csvCell("two\nlines")).toBe('"two\nlines"');
   });
 
-  it("stops formulas: a cell starting with = + - @ (also full-width ＠) gets a leading apostrophe", () => {
-    for (const start of ["=", "+", "-", "@", "＠"]) expect(csvCell(`${start}1+2`)).toBe(`'${start}1+2`);
+  it("stops formulas: a cell starting with = + - @ (also full-width ＝ ＋ － ＠) gets a leading apostrophe", () => {
+    for (const start of ["=", "+", "-", "@", "＠", "＝", "＋", "－"]) expect(csvCell(`${start}1+2`)).toBe(`'${start}1+2`);
     expect(csvCell("=A;1")).toBe(`"'=A;1"`);
   });
 

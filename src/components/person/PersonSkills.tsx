@@ -69,7 +69,7 @@ export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProp
             </TableCell>
             <TableCell>
               {certificates.length === 0 ? (
-                <Text>{assignment ? t("common.none") : "–"}</Text>
+                <Text>–</Text>
               ) : (
                 <ul className={styles.certList}>
                   {certificates.map((c) => (

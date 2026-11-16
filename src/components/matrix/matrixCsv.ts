@@ -6,8 +6,8 @@ import { t } from "@/lib/i18n/t";
 
 /** Excel in Switzerland expects ";" between cells (the decimal comma is taken). */
 const SEPARATOR = ";";
-/** Characters that make Excel or LibreOffice read a cell as a formula (CSV injection), incl. full-width @. */
-const FORMULA_START = /^[=+\-@＠\t\r]/;
+/** Characters that make Excel or LibreOffice read a cell as a formula (CSV injection), incl. their full-width forms. */
+const FORMULA_START = /^[=+\-@＝＋－＠\t\r]/;
 
 /** One CSV cell: formulas defused with a leading apostrophe, then quoted if it holds ; " or a line break. */
 export function csvCell(value: string): string {

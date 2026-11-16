@@ -3,8 +3,9 @@
  * the server (src/lib/fsm/serverOwnership.ts, which decides). One module, so the two cannot drift.
  *
  * A file is accepted when: the extension is .pdf/.jpg/.jpeg/.png, the size is 1 byte … 5 MB, the
- * first bytes are a real PDF/PNG/JPEG, the content type matches the extension, and (on the server)
- * the declared FSM `type` matches the content.
+ * first bytes are a real PDF/PNG/JPEG, the type found in those bytes matches the extension, and (on
+ * the server) the declared FSM `type` matches the content. The browser's own content type
+ * (`File.type`) is not used: the browser only guesses it from the extension.
  */
 import { t } from "@/lib/i18n/t";
 
@@ -49,10 +50,7 @@ export function checkCertificate(file: { fileName: string; size: number; head: U
   const byName = typeFromFileName(fileName);
   if (!byName) return { ok: false, error: t("file.wrongType", { name: fileName }) };
   if (size <= 0) return { ok: false, error: t("file.empty", { name: fileName }) };
-  if (size > MAX_CERTIFICATE_BYTES) {
-    const mb = (size / 1024 / 1024).toFixed(1);
-    return { ok: false, tooLarge: true, error: t("file.tooLarge", { name: fileName, mb, max: MAX_CERTIFICATE_LABEL }) };
-  }
+  if (size > MAX_CERTIFICATE_BYTES) return { ok: false, tooLarge: true, error: t("file.tooLarge", { name: fileName, max: MAX_CERTIFICATE_LABEL }) };
   const byContent = typeFromContent(head);
   if (!byContent) return { ok: false, error: t("file.notCertificate", { name: fileName }) };
   if (byContent !== byName) {

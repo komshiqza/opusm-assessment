@@ -16,11 +16,12 @@ import {
   TableRow,
   Text,
 } from "@ui5/webcomponents-react";
-import { addDays, daysBetween, getAssignmentStatus } from "@/lib/domain/status";
+import { addDays } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { formatDate, formatPersonType } from "@/lib/format";
 import { recordsNeedingType } from "@/lib/domain/persons";
 import { t, tn } from "@/lib/i18n/t";
+import { expiryStatus } from "./expiryStatus";
 import type { SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
@@ -94,8 +95,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
           }
         >
           {rows.map(({ assignment, person, definition, endDate }) => {
-            const status = getAssignmentStatus(assignment, today);
-            const left = daysBetween(today, endDate);
+            const { status, text } = expiryStatus({ startDate: assignment.startDate, endDate }, today);
             const certs = state.certificatesBySkill.get(assignment.id)?.length ?? 0;
             return (
               <TableRow key={assignment.id} rowKey={assignment.id}>
@@ -109,7 +109,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
                     style={{ color: STATUS_DISPLAY[status].color, fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}
                   >
                     <Icon name={STATUS_DISPLAY[status].icon} style={{ color: "inherit", width: "1rem", height: "1rem" }} />
-                    {left < 0 ? tn("expiry.expiredAgo", -left) : left === 0 ? t("expiry.endsToday") : tn("expiry.daysLeft", left)}
+                    {text}
                   </span>
                 </TableCell>
                 <TableCell>
@@ -127,7 +127,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
                   <Text>{assignment.proficiencyName ?? "–"}</Text>
                 </TableCell>
                 <TableCell>
-                  <Text>{certs || t("common.none")}</Text>
+                  <Text>{certs || "–"}</Text>
                 </TableCell>
               </TableRow>
             );

@@ -33,6 +33,8 @@ describe("checkCertificate (shared by browser and server)", () => {
     expect(MAX_CERTIFICATE_BYTES).toBe(5_242_880);
     expect(checkCertificate({ fileName: "a.pdf", size: MAX_CERTIFICATE_BYTES, head: PDF })).toMatchObject({ ok: true });
     expect(checkCertificate({ fileName: "a.pdf", size: MAX_CERTIFICATE_BYTES + 1, head: PDF })).toMatchObject({ ok: false, tooLarge: true });
+    // No rounded size in the message: 5 MB + 1 byte would read "5.0 MB is larger than 5 MB".
+    expect(checkCertificate({ fileName: "a.pdf", size: MAX_CERTIFICATE_BYTES + 1, head: PDF })).toMatchObject({ error: "a.pdf is larger than the 5 MB limit." });
   });
 
   it("refuses empty files, unknown extensions and content too short to identify", () => {
