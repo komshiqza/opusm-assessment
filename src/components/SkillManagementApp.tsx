@@ -48,13 +48,15 @@ const tabKeyOf = (element: HTMLElement | undefined) => element?.dataset.key as T
 
 export function SkillManagementApp() {
   const state = useSkillData();
-  const [tab, setTab] = useState<TabKey>("matrix");
+  /** The tab the user picked; until then the app shows the first tab of the current order. */
+  const [pickedTab, setTab] = useState<TabKey | null>(null);
   const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition } | null>(null);
   const isPhone = useMediaQuery(PHONE_QUERY);
   const themeMenu = useThemeMenu();
   const isNarrow = useMediaQuery(NARROW_QUERY);
   const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
+  const tab = pickedTab ?? order[0];
   const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
 
   /** After a move the strip is rebuilt; put keyboard focus back on the moved tab. */
@@ -144,7 +146,7 @@ export function SkillManagementApp() {
                 key={order.join()}
                 className={styles.tabs}
                 contentBackgroundDesign="Transparent"
-                onTabSelect={(e) => setTab(tabKeyOf(e.detail.tab) ?? "matrix")}
+                onTabSelect={(e) => setTab(tabKeyOf(e.detail.tab) ?? tab)}
                 // Drag a tab (or Ctrl + arrow keys) to reorder: UI5 asks with move-over, then reports the drop with move.
                 onMoveOver={(e) => {
                   const { source, destination } = e.detail;
@@ -156,6 +158,7 @@ export function SkillManagementApp() {
                   const placement = e.detail.destination.placement;
                   if (source && target && placement !== "On") {
                     focusAfterMove.current = source;
+                    setTab(tab); // stay on the open tab, even if another tab becomes first
                     saveTabOrder(moveTab(order, source, target, placement));
                   }
                 }}
@@ -176,7 +179,14 @@ export function SkillManagementApp() {
             <p className={styles.footnote}>
               Tip: drag a tab to change the order (saved in this browser only).{" "}
               {!isDefaultTabOrder(order) && (
-                <Button design="Transparent" icon="reset" onClick={resetTabOrder}>
+                <Button
+                  design="Transparent"
+                  icon="reset"
+                  onClick={() => {
+                    setTab(tab);
+                    resetTabOrder();
+                  }}
+                >
                   Reset tab order
                 </Button>
               )}

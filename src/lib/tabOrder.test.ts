@@ -3,26 +3,26 @@ import { DEFAULT_TAB_ORDER, isDefaultTabOrder, moveTab, parseTabOrder } from "./
 
 describe("parseTabOrder", () => {
   it("uses the default order when nothing valid is stored", () => {
-    expect(DEFAULT_TAB_ORDER).toEqual(["matrix", "expiry", "find", "catalogue"]);
+    expect(DEFAULT_TAB_ORDER).toEqual(["find", "matrix", "expiry", "catalogue"]);
     for (const raw of [null, "", "not json", "{}", "[1,2]"]) expect(parseTabOrder(raw)).toEqual(DEFAULT_TAB_ORDER);
   });
 
   it("keeps a stored order, drops unknown and duplicate keys, appends missing tabs", () => {
-    expect(parseTabOrder('["catalogue","matrix"]')).toEqual(["catalogue", "matrix", "expiry", "find"]);
-    expect(parseTabOrder('["find","hack","find","matrix"]')).toEqual(["find", "matrix", "expiry", "catalogue"]);
+    expect(parseTabOrder('["catalogue","matrix"]')).toEqual(["catalogue", "matrix", "find", "expiry"]);
+    expect(parseTabOrder('["expiry","hack","expiry","catalogue"]')).toEqual(["expiry", "catalogue", "find", "matrix"]);
   });
 });
 
 describe("moveTab", () => {
   it("moves a tab before or after another", () => {
-    expect(moveTab(DEFAULT_TAB_ORDER, "catalogue", "matrix", "Before")).toEqual(["catalogue", "matrix", "expiry", "find"]);
-    expect(moveTab(DEFAULT_TAB_ORDER, "matrix", "find", "After")).toEqual(["expiry", "find", "matrix", "catalogue"]);
+    expect(moveTab(DEFAULT_TAB_ORDER, "catalogue", "matrix", "Before")).toEqual(["find", "catalogue", "matrix", "expiry"]);
+    expect(moveTab(DEFAULT_TAB_ORDER, "find", "expiry", "After")).toEqual(["matrix", "expiry", "find", "catalogue"]);
     expect(moveTab(DEFAULT_TAB_ORDER, "find", "find", "After")).toEqual(DEFAULT_TAB_ORDER);
   });
 
   it("knows the default order", () => {
     expect(isDefaultTabOrder(DEFAULT_TAB_ORDER)).toBe(true);
-    expect(isDefaultTabOrder(moveTab(DEFAULT_TAB_ORDER, "find", "matrix", "Before"))).toBe(false);
+    expect(isDefaultTabOrder(moveTab(DEFAULT_TAB_ORDER, "matrix", "find", "Before"))).toBe(false);
   });
 });
 
@@ -46,9 +46,9 @@ describe("storage (fresh module per test, as on a page load)", () => {
     const values = new Map<string, string>();
     fakeWindow(mapStorage(values));
     const store = await load();
-    store.saveTabOrder(["find", "matrix", "expiry", "catalogue"]);
-    expect(store.parseTabOrder(store.readStoredTabOrder())).toEqual(["find", "matrix", "expiry", "catalogue"]);
-    expect(values.get("skill-management.tab-order")).toBe('["find","matrix","expiry","catalogue"]');
+    store.saveTabOrder(["expiry", "find", "matrix", "catalogue"]);
+    expect(store.parseTabOrder(store.readStoredTabOrder())).toEqual(["expiry", "find", "matrix", "catalogue"]);
+    expect(values.get("skill-management.tab-order")).toBe('["expiry","find","matrix","catalogue"]');
     store.resetTabOrder();
     expect(store.parseTabOrder(store.readStoredTabOrder())).toEqual(DEFAULT_TAB_ORDER);
     expect(values.has("skill-management.tab-order")).toBe(false);
@@ -65,7 +65,7 @@ describe("storage (fresh module per test, as on a page load)", () => {
     fakeWindow(mapStorage(values));
     const store = await load();
     expect(store.readStoredTabOrder()).toBe("");
-    values.set("skill-management.tab-order", '["find","matrix","expiry","catalogue"]'); // another window
+    values.set("skill-management.tab-order", '["expiry","find","matrix","catalogue"]'); // another window
     expect(store.parseTabOrder(store.readStoredTabOrder())).toEqual(DEFAULT_TAB_ORDER);
   });
 
@@ -91,7 +91,7 @@ describe("storage (fresh module per test, as on a page load)", () => {
       },
     });
     const store = await load();
-    store.saveTabOrder(["find", "matrix", "expiry", "catalogue"]);
-    expect(store.parseTabOrder(store.readStoredTabOrder())).toEqual(["find", "matrix", "expiry", "catalogue"]);
+    store.saveTabOrder(["expiry", "find", "matrix", "catalogue"]);
+    expect(store.parseTabOrder(store.readStoredTabOrder())).toEqual(["expiry", "find", "matrix", "catalogue"]);
   });
 });

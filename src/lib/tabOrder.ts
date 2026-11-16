@@ -6,8 +6,11 @@
 
 export type TabKey = "matrix" | "expiry" | "find" | "catalogue";
 
-/** By daily importance for a service manager; the catalogue is setup and used rarely. */
-export const DEFAULT_TAB_ORDER: TabKey[] = ["matrix", "expiry", "find", "catalogue"];
+/**
+ * Find technician first: the shortest path to the right person for a job. The app opens on the first
+ * tab of the current order. The catalogue is setup and used rarely.
+ */
+export const DEFAULT_TAB_ORDER: TabKey[] = ["find", "matrix", "expiry", "catalogue"];
 
 const STORAGE_KEY = "skill-management.tab-order";
 const CHANGE_EVENT = "skill-management:tab-order";
