@@ -22,23 +22,7 @@
   min-width: 0;
 }
 
-/* The tab container is only the strip: its own (empty) content area is hidden. */
-.tabs::part(content) {
-  display: none;
-}
 
-.tabArea {
-  min-width: 0;
-}
-
-.panel {
-  min-width: 0;
-  padding: 1rem 0 0;
-}
-
-.panel[hidden] {
-  display: none;
-}
 
 .footnote {
   margin: 0;

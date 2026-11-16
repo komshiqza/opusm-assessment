@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   DatePicker,
   Icon,
@@ -24,6 +24,7 @@ import { validateValidity } from "@/lib/domain/validation";
 import { selectPersonRows } from "@/lib/domain/persons";
 import { formatDate, formatPersonType } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
+import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "@/components/matrix/statusDisplay";
 import styles from "./FindTechnician.module.css";
@@ -41,10 +42,10 @@ interface FindTechnicianProps {
  */
 export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
   const today = todayIso();
-  const [skillIds, setSkillIds] = useState<string[]>([]);
+  const [skillIds, setSkillIds] = usePageState<string[]>("find.skillIds", []);
   /** "any" or a proficiency id. Not "": UI5's Select shows an empty value as "nothing selected". */
-  const [minLevelId, setMinLevelId] = useState(ANY_LEVEL);
-  const [jobDate, setJobDate] = useState(today);
+  const [minLevelId, setMinLevelId] = usePageState("find.minLevelId", ANY_LEVEL);
+  const [jobDate, setJobDate] = usePageState("find.jobDate", today);
 
   const definitions = useMemo(() => state.data?.definitions ?? [], [state.data]);
   const levels = state.data?.scale?.levels ?? [];

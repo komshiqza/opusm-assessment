@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Button,
   Icon,
@@ -20,6 +20,7 @@ import { formatPersonType } from "@/lib/format";
 import { selectPersonRows } from "@/lib/domain/persons";
 import { PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
+import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, statusText } from "./statusDisplay";
 import styles from "./SkillMatrix.module.css";
@@ -34,10 +35,10 @@ interface SkillMatrixProps {
 
 export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixProps) {
   const { data, assignmentByCell, certificatesBySkill } = state;
-  const [personQuery, setPersonQuery] = useState("");
-  const [skillIds, setSkillIds] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [showAllRecords, setShowAllRecords] = useState(false);
+  const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
+  const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
+  const [statusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
+  const [showAllRecords, setShowAllRecords] = usePageState("matrix.showAllRecords", false);
   const today = todayIso();
   const isPhone = useMediaQuery(PHONE_QUERY);
 

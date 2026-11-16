@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   BusyIndicator,
   Button,
@@ -52,6 +52,19 @@ export function SkillManagementApp() {
   const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
   const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
+
+  /** After a move the strip is rebuilt; put keyboard focus back on the moved tab. */
+  const focusAfterMove = useRef<TabKey | null>(null);
+  useEffect(() => {
+    const key = focusAfterMove.current;
+    if (!key) return;
+    focusAfterMove.current = null;
+    const frame = requestAnimationFrame(() => {
+      const moved = document.querySelector<HTMLElement & { getDomRefInStrip?: () => HTMLElement | undefined }>(`ui5-tab[data-key="${key}"]`);
+      moved?.getDomRefInStrip?.()?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [order]);
 
   const content: Record<TabKey, ReactNode> = {
     matrix: <SkillMatrix state={state} onOpenCell={openCell} onGoToCatalogue={() => setTab("catalogue")} />,
@@ -109,42 +122,41 @@ export function SkillManagementApp() {
         {state.data && (
           <>
             <BusyIndicator active={state.refreshing} delay={300} className={styles.content}>
-              <div className={styles.tabArea}>
-                <TabContainer
-                  // The container is only the tab strip; the panels below stay mounted, so their filters and
-                  // inputs survive. UI5 does not redraw the strip when tabs are reordered, so a new order mounts a new strip.
-                  key={order.join()}
-                  className={styles.tabs}
-                  contentBackgroundDesign="Transparent"
-                  onTabSelect={(e) => setTab(tabKeyOf(e.detail.tab) ?? "matrix")}
-                  // Drag a tab (or Ctrl + arrow keys) to reorder: UI5 asks with move-over, then reports the drop with move.
-                  onMoveOver={(e) => {
-                    const { source, destination } = e.detail;
-                    if (tabKeyOf(source.element) && tabKeyOf(destination.element) && destination.placement !== "On") e.preventDefault();
-                  }}
-                  onMove={(e) => {
-                    const source = tabKeyOf(e.detail.source.element);
-                    const target = tabKeyOf(e.detail.destination.element);
-                    const placement = e.detail.destination.placement;
-                    if (source && target && placement !== "On") saveTabOrder(moveTab(order, source, target, placement));
-                  }}
-                >
-                  {order.map((key) => (
-                    <Tab
-                      key={key}
-                      data-key={key}
-                      movable
-                      selected={tab === key}
-                      text={`${isPhone ? TAB_LABELS[key].short : TAB_LABELS[key].full}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
-                    />
-                  ))}
-                </TabContainer>
+              <TabContainer
+                // UI5 names each tab's slot by its position and does not redraw the strip when the app
+                // reorders tabs, so a new order mounts a new strip. The panels' inputs live in usePageState,
+                // so they survive; focus returns to the moved tab below.
+                key={order.join()}
+                className={styles.tabs}
+                contentBackgroundDesign="Transparent"
+                onTabSelect={(e) => setTab(tabKeyOf(e.detail.tab) ?? "matrix")}
+                // Drag a tab (or Ctrl + arrow keys) to reorder: UI5 asks with move-over, then reports the drop with move.
+                onMoveOver={(e) => {
+                  const { source, destination } = e.detail;
+                  if (tabKeyOf(source.element) && tabKeyOf(destination.element) && destination.placement !== "On") e.preventDefault();
+                }}
+                onMove={(e) => {
+                  const source = tabKeyOf(e.detail.source.element);
+                  const target = tabKeyOf(e.detail.destination.element);
+                  const placement = e.detail.destination.placement;
+                  if (source && target && placement !== "On") {
+                    focusAfterMove.current = source;
+                    saveTabOrder(moveTab(order, source, target, placement));
+                  }
+                }}
+              >
                 {order.map((key) => (
-                  <section key={key} role="tabpanel" aria-label={TAB_LABELS[key].full} hidden={tab !== key} className={styles.panel}>
+                  <Tab
+                    key={key}
+                    data-key={key}
+                    movable
+                    selected={tab === key}
+                    text={`${isPhone ? TAB_LABELS[key].short : TAB_LABELS[key].full}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
+                  >
                     {content[key]}
-                  </section>
+                  </Tab>
                 ))}
-              </div>
+              </TabContainer>
             </BusyIndicator>
             <p className={styles.footnote}>
               Tip: drag a tab to change the order (saved in this browser only).{" "}

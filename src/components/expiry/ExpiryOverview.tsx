@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   CheckBox,
   Icon,
@@ -19,6 +19,7 @@ import {
 import { addDays, daysBetween, getAssignmentStatus, todayIso } from "@/lib/domain/status";
 import { formatDate, formatPersonType } from "@/lib/format";
 import type { SkillDataState } from "@/hooks/useSkillData";
+import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "@/components/matrix/statusDisplay";
 
@@ -31,8 +32,8 @@ interface ExpiryOverviewProps {
 
 /** Everything that ends within the next N days (and optionally what has already expired), soonest first. */
 export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
-  const [days, setDays] = useState(30);
-  const [includeExpired, setIncludeExpired] = useState(true);
+  const [days, setDays] = usePageState("expiry.days", 30);
+  const [includeExpired, setIncludeExpired] = usePageState("expiry.includeExpired", true);
   const today = todayIso();
   const until = addDays(today, days);
 
@@ -96,9 +97,15 @@ export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <span style={{ color: STATUS_DISPLAY[status].color, fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                  <span
+                    style={{ color: STATUS_DISPLAY[status].color, fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}
+                  >
                     <Icon name={STATUS_DISPLAY[status].icon} style={{ color: "inherit", width: "1rem", height: "1rem" }} />
-                    {left < 0 ? `Expired ${-left} day${left === -1 ? "" : "s"} ago` : left === 0 ? "Ends today" : `${left} day${left === 1 ? "" : "s"} left`}
+                    {left < 0
+                      ? `Expired ${-left} day${left === -1 ? "" : "s"} ago`
+                      : left === 0
+                        ? "Ends today"
+                        : `${left} day${left === 1 ? "" : "s"} left`}
                   </span>
                 </TableCell>
                 <TableCell>
