@@ -36,19 +36,26 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onBu
   const [inputKey, setInputKey] = useState(0);
 
   const upload = async (files: File[]) => {
-    const { valid, problems } = await splitCertificateFiles(files);
-    if (valid.length) onBusyChange(true);
-    const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`));
-    setErrors([...problems, ...outcome.failed.map((f) => `${f.file.name}: ${f.error}`)]);
-    const uploaded = outcome.uploaded.length;
-    if (uploaded) {
-      setProgress("Refreshing…");
-      await onChanged();
-      toast(`${uploaded} certificate${uploaded > 1 ? "s" : ""} uploaded`);
+    // Busy from the first moment (also while the files are checked), so nothing else can start.
+    onBusyChange(true);
+    setProgress("Checking files…");
+    try {
+      const { valid, problems } = await splitCertificateFiles(files);
+      const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`));
+      setErrors([...problems, ...outcome.failed.map((f) => `${f.file.name}: ${f.error}`)]);
+      const uploaded = outcome.uploaded.length;
+      if (uploaded) {
+        setProgress("Refreshing…");
+        await onChanged();
+        toast(`${uploaded} certificate${uploaded > 1 ? "s" : ""} uploaded`);
+      }
+    } catch (e) {
+      setErrors([toUserMessage(e)]);
+    } finally {
+      setProgress(null);
+      setInputKey((k) => k + 1);
+      onBusyChange(false);
     }
-    setProgress(null);
-    setInputKey((k) => k + 1);
-    onBusyChange(false);
   };
 
   return (

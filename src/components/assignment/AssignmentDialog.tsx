@@ -58,7 +58,10 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const assignmentId = assignment?.id ?? createdId;
   /** Certificate uploads running: the assignment must not be removed or the dialog closed meanwhile. */
   const [uploading, setUploading] = useState(false);
-  const locked = busy || uploading;
+  /** Picked files are being checked (first bytes): Save must wait, or they would be left out. */
+  const [inspecting, setInspecting] = useState(false);
+  const inspectingRef = useRef(false);
+  const locked = busy || uploading || inspecting;
 
   // The picker's value is always in valueFormat (YYYY-MM-DD) or, if the user typed nonsense, that text.
   // Our own validation decides; the picker's `valid` flag is unreliable with a custom displayFormat.
@@ -68,7 +71,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
   /** Runs one save or retry at a time and keeps the dialog locked meanwhile. */
   const runLocked = async (work: () => Promise<void>) => {
-    if (busyRef.current) return;
+    if (busyRef.current || inspectingRef.current) return;
     busyRef.current = true;
     setBusy(true);
     setError(null);
@@ -128,11 +131,22 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     });
 
   const pickFiles = async (files: File[]) => {
-    const { valid, problems } = await splitCertificateFiles(files);
-    setPickProblems(problems);
-    // No automatic de-duplication: two different files can share name and size. Every picked file is listed and can be removed.
-    setPendingFiles((current) => [...current, ...valid]);
-    setPickerKey((k) => k + 1);
+    inspectingRef.current = true;
+    setInspecting(true);
+    setProgress("Checking files…");
+    try {
+      const { valid, problems } = await splitCertificateFiles(files);
+      setPickProblems(problems);
+      // No automatic de-duplication: two different files can share name and size. Every picked file is listed and can be removed.
+      setPendingFiles((current) => [...current, ...valid]);
+    } catch (e) {
+      setPickProblems([toUserMessage(e)]);
+    } finally {
+      inspectingRef.current = false;
+      setInspecting(false);
+      setProgress(null);
+      setPickerKey((k) => k + 1);
+    }
   };
 
   const status = getAssignmentStatus(assignment, today);
