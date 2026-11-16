@@ -27,10 +27,14 @@
   align-self: flex-end;
 }
 
-/* Export sits at the end of the filter bar. */
+/* Bulk assign and export sit at the end of the filter bar. */
 .export {
   align-self: flex-end;
   margin-left: auto;
+}
+
+.exportNext {
+  align-self: flex-end;
 }
 
 .summary {

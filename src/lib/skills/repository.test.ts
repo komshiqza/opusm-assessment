@@ -12,6 +12,10 @@ import {
   createSkillDefinition,
   checkAssignmentCreated,
   recheckUploads,
+  bulkAssign,
+  retryBulk,
+  recheckBulk,
+  BULK_LIMIT,
   retryItems,
   uploadCertificates,
   loadCertificateFile,
@@ -655,5 +659,123 @@ describe("a write FSM did not answer is checked once in FSM, never repeated auto
       await expect(checkAssignmentCreated(OWN_TAG, PERSON)).resolves.toMatchObject({ result: "unconfirmed" });
       expect(writes()).toEqual([]);
     });
+  });
+});
+
+describe("assign one skill to several persons", () => {
+  const people = ["A", "B", "C"].map((c) => c.repeat(32));
+  const input = { startDate: "2026-11-16", endDate: "2027-11-16", proficiencyId: "LEVEL" };
+  /** Persons FSM already lists with the skill (the duplicate check finds them). */
+  let alreadyHave: Set<string>;
+  /** Persons whose create FSM refuses. */
+  let refused: Set<string>;
+  /** Persons FSM stores although the create timed out (the answer was lost). */
+  let arrives: Set<string>;
+  const creates = () => writes().filter((c) => c.path === "skill/v2/skills").map((c) => (c.body as { technician: string }[])[0].technician);
+
+  beforeEach(() => {
+    alreadyHave = new Set();
+    refused = new Set();
+    arrives = new Set();
+    searchAnswer = (path, filter) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      const person = filter.find((f) => f.field === "technicianId")?.value as string | undefined;
+      if (path === "skill/v1/skills/search" && person) {
+        return alreadyHave.has(person) || arrives.has(person) ? [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding", technicianId: person }] : [];
+      }
+      return [];
+    };
+    bulkAnswer = (path, method, body) => {
+      const person = (body as { technician: string }[] | undefined)?.[0]?.technician;
+      if (path === "skill/v2/skills" && method === "POST" && person && refused.has(person)) {
+        return { hasErrors: true, results: [{ status: 400, error: { detail: "Simulated FSM refusal" } }] };
+      }
+      return null;
+    };
+  });
+
+  it("assigns each person and reports a partial failure per person with FSM's message", async () => {
+    refused = new Set([people[1]]);
+    const results = await bulkAssign(OWN_TAG, people, input);
+    expect(results.map((r) => [r.personId, r.result])).toEqual([
+      [people[0], "assigned"],
+      [people[1], "failed"],
+      [people[2], "assigned"],
+    ]);
+    expect(results[1].error).toMatch(/Simulated FSM refusal/);
+    expect(creates()).toEqual(people);
+  });
+
+  it("skips a person who already has the skill, without a write for them", async () => {
+    alreadyHave = new Set([people[0]]);
+    const results = await bulkAssign(OWN_TAG, people, input);
+    expect(results.map((r) => r.result)).toEqual(["skipped", "assigned", "assigned"]);
+    expect(creates()).toEqual([people[1], people[2]]);
+  });
+
+  it(`refuses more than ${BULK_LIMIT} persons at once, before any write`, async () => {
+    const many = Array.from({ length: BULK_LIMIT + 1 }, (_, i) => String(i).padStart(32, "0"));
+    await expect(bulkAssign(OWN_TAG, many, input)).rejects.toThrow(/25/);
+    expect(writes()).toEqual([]);
+  });
+
+  it("retries only the failed persons", async () => {
+    refused = new Set([people[1]]);
+    const first = await bulkAssign(OWN_TAG, people, input);
+    refused = new Set();
+    calls = [];
+    const retry = await retryBulk(OWN_TAG, first.filter((r) => r.result === "failed"), input);
+    expect(retry.map((r) => [r.personId, r.result])).toEqual([[people[1], "assigned"]]);
+    expect(creates()).toEqual([people[1]]);
+  });
+
+  it("a timed-out create is checked, never sent again by itself, and a retry checks first", async () => {
+    vi.useFakeTimers();
+    try {
+      hangingWrite = "skill/v2/skills";
+      const pending = bulkAssign(OWN_TAG, [people[0]], input);
+      await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+      const [result] = await pending;
+      expect(result).toMatchObject({ result: "failed", checkFirst: true });
+      expect(creates()).toEqual([people[0]]);
+
+      // FSM finished the first create after all: the retry finds it and does not create again.
+      hangingWrite = null;
+      arrives = new Set([people[0]]);
+      calls = [];
+      const [retried] = await retryBulk(OWN_TAG, [result], input);
+      expect(retried.result).toBe("assigned");
+      expect(creates()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a timed-out create whose check fails stays 'not confirmed' and is only checked again", async () => {
+    vi.useFakeTimers();
+    try {
+      hangingWrite = "skill/v2/skills";
+      const base = searchAnswer;
+      let checkFails = false;
+      searchAnswer = (path, filter) => {
+        if (checkFails && filter.some((f) => f.field === "technicianId")) throw new Error("simulated outage");
+        return base(path, filter);
+      };
+      const pending = bulkAssign(OWN_TAG, [people[0]], input);
+      await vi.advanceTimersByTimeAsync(1);
+      checkFails = true;
+      await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+      const [result] = await pending;
+      expect(result.result).toBe("unconfirmed");
+
+      checkFails = false;
+      hangingWrite = null;
+      calls = [];
+      const [checked] = await recheckBulk(OWN_TAG, [result]);
+      expect(checked).toMatchObject({ result: "failed", checkFirst: true });
+      expect(creates()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

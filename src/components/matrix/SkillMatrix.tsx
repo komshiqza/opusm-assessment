@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Button,
   Icon,
@@ -29,6 +29,7 @@ import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
+import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
 import styles from "./SkillMatrix.module.css";
 
 type StatusFilter = "all" | AssignmentStatus;
@@ -56,6 +57,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   /** Below 1280 px: icon plus short date, narrower columns (the phone has its own cards). */
   const isCompact = useMediaQuery(COMPACT_QUERY) && !isPhone;
   const [scrollerRef, canScrollRight] = useCanScrollRight();
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const definitions = useMemo(() => data?.definitions ?? [], [data]);
   /** The skill filter without skills deleted meanwhile; a filter on only deleted skills means "all skills". */
@@ -202,10 +204,13 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             Reset filters
           </Button>
         )}
+        <Button design="Transparent" icon="add-employee" className={styles.export} onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
+          Assign to several…
+        </Button>
         <Button
           design="Transparent"
           icon="excel-attachment"
-          className={styles.export}
+          className={styles.exportNext}
           tooltip="Download the rows and skill columns shown now as a CSV file for Excel"
           onClick={() =>
             downloadCsv(
@@ -372,6 +377,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           </div>
         </div>
       )}
+      {bulkOpen && <BulkAssignDialog persons={visiblePersons} state={state} onClose={() => setBulkOpen(false)} />}
     </div>
   );
 }
