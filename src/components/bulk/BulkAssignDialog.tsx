@@ -22,12 +22,12 @@ import { BULK_LIMIT, bulkAssign, recheckBulk, retryBulk, type BulkResult } from 
 import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
 import { toUserMessage } from "@/lib/errors";
 import { formatDate, formatPersonType } from "@/lib/format";
-import { recordsNeedingType } from "@/lib/domain/persons";
+import { recordsNeedingType, secondaryRecordIds } from "@/lib/domain/persons";
 import { useToday } from "@/hooks/useToday";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import type { Person } from "@/lib/skills/types";
 import { useToast } from "@/components/common/Toast";
-import { mergeResults, planBulk } from "./bulkPlan";
+import { bulkCandidates, mergeResults, planBulk } from "./bulkPlan";
 import styles from "./BulkAssignDialog.module.css";
 import { t, tn } from "@/lib/i18n/t";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -73,8 +73,10 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
   const plan = planBulk(selected, hasSkill);
   const dateError = validateValidity(effectiveStartDate(from || null, today), to || null);
   const input = { startDate: from || null, endDate: to || null, proficiencyId: definitionLevels.length ? levelId || null : null };
+  /** Linked Employee records are not offered: new skills go on the person's main (ERP user) record. */
+  const { selectable, leftOut } = bulkCandidates(persons, secondaryRecordIds(state.data?.persons ?? []));
   /** Two records of one person (ERP user and Employee) look alike: their record type tells them apart. */
-  const needsType = recordsNeedingType(persons);
+  const needsType = recordsNeedingType(selectable);
   const describe = (p: Person) => [p.jobTitle, needsType.has(p.id) ? formatPersonType(p.type) : ""].filter(Boolean).join(" · ") || undefined;
   const nameOf = (personId: string) => {
     const person = persons.find((p) => p.id === personId);
@@ -263,7 +265,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
                 className={styles.persons}
                 onSelectionChange={(e) => setSelected(e.detail.selectedItems.map((item) => String(item.dataset.id)))}
               >
-                {persons.map((p) => (
+                {selectable.map((p) => (
                   <ListItemStandard
                     key={p.id}
                     data-id={p.id}
@@ -275,6 +277,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
                   </ListItemStandard>
                 ))}
               </List>
+              {leftOut > 0 && <Text className={styles.muted}>{tn("bulk.secondaryLeftOut", leftOut)}</Text>}
             </div>
             <MessageStrip design={plan.overLimit ? "Negative" : "Information"} hideCloseButton>
               {!definition

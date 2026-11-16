@@ -4,6 +4,7 @@ import { Bar, Button, Dialog, Text } from "@ui5/webcomponents-react";
 import { useToday } from "@/hooks/useToday";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { formatPersonType } from "@/lib/format";
+import { secondaryRecordIds } from "@/lib/domain/persons";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { PersonSkills } from "./PersonSkills";
 import { personSkillRows, personSkillSummary } from "./personSkillRows";
@@ -31,6 +32,7 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
     today,
   );
   const { held, total } = personSkillSummary(rows);
+  const secondary = secondaryRecordIds(state.data?.persons ?? []);
 
   return (
     <Dialog
@@ -54,10 +56,12 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
         <Text className={styles.muted}>
           {t("personView.summary", { held, total })}
         </Text>
+        {secondary.has(records[0].id) && <Text className={styles.muted}>{t("matrix.assignOnMain")}</Text>}
       </div>
       <PersonSkills
         personName={person.name}
         rows={rows}
+        secondary={secondary}
         recordLabel={(recordId) => formatPersonType(records.find((r) => r.id === recordId)?.type ?? null)}
         onOpenSkill={(definition, recordId) => onOpenCell(records.find((r) => r.id === recordId) ?? person, definition)}
       />

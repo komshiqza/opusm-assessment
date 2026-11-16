@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeResults, planBulk } from "./bulkPlan";
+import { bulkCandidates, mergeResults, planBulk } from "./bulkPlan";
 
 describe("planBulk (preview before assigning)", () => {
   it("assigns the selected persons who do not have the skill and skips the others", () => {
@@ -36,5 +36,12 @@ describe("mergeResults (a retry replaces the lines of the retried persons)", () 
       ["b", "assigned"],
       ["c", "unconfirmed"],
     ]);
+  });
+});
+
+describe("bulkCandidates (who can be picked in Bulk assign)", () => {
+  it("leaves out secondary records (new skills go on the main record) and counts them for the note", () => {
+    const persons = [{ id: "U" }, { id: "E" }, { id: "SELF" }];
+    expect(bulkCandidates(persons, new Set(["E"]))).toEqual({ selectable: [{ id: "U" }, { id: "SELF" }], leftOut: 1 });
   });
 });

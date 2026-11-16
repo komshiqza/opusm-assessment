@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countPhysicalPersons, personsWithoutJobTitle, recordsNeedingType, selectPersonRows } from "./persons";
+import { countPhysicalPersons, personsWithoutJobTitle, recordsNeedingType, secondaryRecordIds, selectPersonRows } from "./persons";
 
 /** Records as SAP links them: every record's refId is the id of the ERPUSER record (which references itself). */
 const record = (id: string, type: string, refId: string, jobTitle: string | null = "Service Technician") => ({ id, type, refId, jobTitle });
@@ -77,5 +77,37 @@ describe("recordsNeedingType (\"ERP user\" etc. only where it tells rows apart)"
 
   it("does not count the same record twice (e.g. one row per assignment in the expiry list)", () => {
     expect(recordsNeedingType([annaErp, annaErp, marcoErp])).toEqual(new Set());
+  });
+});
+
+describe("secondaryRecordIds (new skills only on a person's main record)", () => {
+  const plain = (id: string, type: string, refId: string | null) => ({ id, type, refId, jobTitle: "Service Technician" });
+  const loaded = [
+    plain("U", "ERPUSER", "U"),
+    plain("E", "EMPLOYEE", "U"), // linked to a loaded ERPUSER
+    plain("S", "SALESEMPLOYEE", "U"), // linked to a loaded ERPUSER
+    plain("SELF", "EMPLOYEE", "SELF"), // refId to itself: its own person
+    plain("NOREF", "EMPLOYEE", null), // no refId: its own person
+    plain("LOST", "EMPLOYEE", "NOT-LOADED"), // refId to a person that is not loaded
+    plain("TOEMP", "EMPLOYEE", "SELF"), // refId to a record that is not an ERPUSER
+    { id: "ADMIN", type: "ERPUSER", refId: "ADMIN", jobTitle: null }, // ERPUSER without a job title
+  ];
+  const secondary = secondaryRecordIds(loaded);
+
+  it.each([
+    ["U", false, "an ERPUSER record"],
+    ["E", true, "an EMPLOYEE linked to a loaded ERPUSER"],
+    ["S", true, "a SALESEMPLOYEE linked to a loaded ERPUSER"],
+    ["SELF", false, "an EMPLOYEE whose refId is itself"],
+    ["NOREF", false, "an EMPLOYEE without a refId"],
+    ["LOST", false, "an EMPLOYEE whose refId is not loaded"],
+    ["TOEMP", false, "an EMPLOYEE whose refId is not an ERPUSER"],
+    ["ADMIN", false, "an ERPUSER without a job title"],
+  ] as const)("%s → secondary %s (%s)", (id, expected, _why) => {
+    expect(secondary.has(id)).toBe(expected);
+  });
+
+  it("works on the demo company's pairs", () => {
+    expect([...secondaryRecordIds(all)].sort()).toEqual(["anna-emp", "anna-sales", "dominic-emp", "eva-emp", "marco-emp"]);
   });
 });

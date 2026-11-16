@@ -76,6 +76,23 @@ export function personsWithoutJobTitle(persons: PersonRecord[]): Set<string> {
 }
 
 /**
+ * Secondary records: an EMPLOYEE or SALESEMPLOYEE record whose refId points to a loaded ERPUSER
+ * record (another record than itself). New skills go only on a person's main record, so one person's
+ * skills are not split over two records; existing skills on a secondary record stay fully usable.
+ * Not secondary: every ERPUSER record (also without a job title), and a record without a loaded
+ * ERPUSER behind it (no refId, refId to itself, or refId to a record that is not loaded): it is that
+ * person's only record. A UX rule of this app, not a rule of the shared company.
+ */
+export function secondaryRecordIds(persons: PersonRecord[]): Set<string> {
+  const erpUsers = new Set(persons.filter((p) => p.type === "ERPUSER").map((p) => p.id));
+  return new Set(
+    persons
+      .filter((p) => (p.type === "EMPLOYEE" || p.type === "SALESEMPLOYEE") && p.refId && p.refId !== p.id && erpUsers.has(p.refId))
+      .map((p) => p.id),
+  );
+}
+
+/**
  * Records whose type ("ERP user", "Employee") must be shown: only where two different records of the
  * same person are on screen, which would otherwise look identical. With one row per person the type
  * is technical noise. A record listed several times (one row per assignment) counts once.

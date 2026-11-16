@@ -5,7 +5,7 @@ import { Button, Icon, Link, Table, TableCell, TableHeaderCell, TableHeaderRow, 
 import { formatDate } from "@/lib/format";
 import { toUserMessage } from "@/lib/errors";
 import type { Certificate, SkillDefinition } from "@/lib/skills/types";
-import { STATUS_DISPLAY, statusText } from "@/components/matrix/statusDisplay";
+import { STATUS_DISPLAY, cellAction, statusText } from "@/components/matrix/statusDisplay";
 import { CertificatePreview } from "@/components/assignment/CertificatePreview";
 import { saveCertificate } from "@/components/assignment/saveCertificate";
 import type { PersonSkillRow } from "./personSkillRows";
@@ -17,6 +17,8 @@ interface PersonSkillsProps {
   rows: PersonSkillRow<SkillDefinition>[];
   /** "ERP user", "Employee": shown next to a skill that two of the person's records hold. */
   recordLabel?: (recordId: string) => string;
+  /** Linked Employee records (src/lib/domain/persons.ts): no "Assign" there, new skills go on the main record. */
+  secondary?: Set<string>;
   /**
    * Edit or assign one skill. Leave it out for a read-only list (e.g. a later "my skills" view for
    * technicians): then no Edit or Assign buttons are shown, only status, dates and certificates.
@@ -25,7 +27,7 @@ interface PersonSkillsProps {
 }
 
 /** All skills of one person: status, valid from/to, level and certificates (open or download). */
-export function PersonSkills({ personName, rows, recordLabel, onOpenSkill }: PersonSkillsProps) {
+export function PersonSkills({ personName, rows, recordLabel, secondary, onOpenSkill }: PersonSkillsProps) {
   const [previewed, setPreviewed] = useState<Certificate | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -92,7 +94,12 @@ export function PersonSkills({ personName, rows, recordLabel, onOpenSkill }: Per
                 </ul>
               )}
             </TableCell>
-            {onOpenSkill ? (
+            {onOpenSkill && cellAction(Boolean(assignment), secondary?.has(holderId) ?? false) === "assignOnMain" ? (
+              // A linked Employee record: no "Assign" (the dialog says once where to assign instead).
+              <TableCell horizontalAlign="End">
+                <Text className={styles.muted}>–</Text>
+              </TableCell>
+            ) : onOpenSkill ? (
               <TableCell horizontalAlign="End">
                 <Button
                   design="Transparent"

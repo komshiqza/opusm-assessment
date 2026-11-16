@@ -38,6 +38,16 @@ export function statusText(status: AssignmentStatus, assignment: { startDate: st
   return "";
 }
 
+/**
+ * What a click on a matrix cell or a phone-card line does: open the assignment, assign the skill, or,
+ * on an empty cell of a secondary record (src/lib/domain/persons.ts), nothing: new skills go on the
+ * person's main record. Existing skills on a secondary record stay fully usable.
+ */
+export function cellAction(assigned: boolean, secondaryRecord: boolean): "open" | "assign" | "assignOnMain" {
+  if (assigned) return "open";
+  return secondaryRecord ? "assignOnMain" : "assign";
+}
+
 /** "2027-09-12" → "12.09.27": the date in a narrow matrix cell. */
 function shortDate(iso: string | null | undefined): string {
   return formatDate(iso).replace(/\.\d{2}(\d{2})$/, ".$1");

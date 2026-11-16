@@ -20,14 +20,14 @@ import {
 import { getAssignmentStatus, type AssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { formatPersonType } from "@/lib/format";
-import { personsWithoutJobTitle, recordsNeedingType, selectPersonRows } from "@/lib/domain/persons";
+import { personsWithoutJobTitle, recordsNeedingType, secondaryRecordIds, selectPersonRows } from "@/lib/domain/persons";
 import { knownSkillIds } from "@/lib/domain/skillFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
-import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
+import { STATUS_DISPLAY, cellAction, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
@@ -77,6 +77,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const rows = showAllRecords ? (data?.persons ?? []) : technicianRows;
   /** Shown because they hold our skills, but not technicians: labelled in the row (see persons.ts). */
   const withoutJobTitle = useMemo(() => personsWithoutJobTitle(data?.persons ?? []), [data]);
+  /** Linked Employee records: new skills go on the person's main (ERP user) record. */
+  const secondary = useMemo(() => secondaryRecordIds(data?.persons ?? []), [data]);
   const technicianCount = technicianRows.filter((p) => !withoutJobTitle.has(p.id)).length;
   const extraCount = technicianRows.length - technicianCount;
   const visiblePersons = rows.filter((p) => {
@@ -128,7 +130,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           certificates: certCount ? tn("matrix.cellCertificates", certCount) : t("matrix.cellNoCertificate"),
         })
       : t("matrix.cellNotAssigned", { person: p.name, skill: d.name });
-    return { assignment, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
+    const action = cellAction(Boolean(assignment), secondary.has(p.id));
+    return { assignment, action, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
   };
 
   /**
@@ -303,7 +306,12 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                     </li>
                   ))}
               </ul>
-              {visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
+              {secondary.has(p.id) && visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
+                <div className={styles.cardMissing}>
+                  <span className={styles.personMeta}>{t("matrix.assignOnMain")}</span>
+                </div>
+              )}
+              {!secondary.has(p.id) && visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
                 <div className={styles.cardMissing}>
                   <span className={styles.personMeta}>{t("matrix.notAssignedList")}</span>
                   {visibleSkills
@@ -367,15 +375,27 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                       const info = cellInfo(p, d);
                       return (
                         <td key={d.id} className={styles.cell} data-status={info.status}>
-                          <button
-                            type="button"
-                            className={styles.cellButton}
-                            onClick={() => onOpenCell(p, d)}
-                            aria-label={info.label}
-                            title={info.label}
-                          >
-                            {cellContent(info, isCompact)}
-                          </button>
+                          {info.action === "assignOnMain" ? (
+                            // A secondary record: no new skill here, only a hint (existing ones open as usual).
+                            <span className={styles.cellLocked} title={t("matrix.assignOnMain")}>
+                              <span className={styles.empty}>
+                                <span aria-hidden>–</span>
+                                <span className={styles.srOnly}>
+                                  {info.label}. {t("matrix.assignOnMain")}
+                                </span>
+                              </span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.cellButton}
+                              onClick={() => onOpenCell(p, d)}
+                              aria-label={info.label}
+                              title={info.label}
+                            >
+                              {cellContent(info, isCompact)}
+                            </button>
+                          )}
                         </td>
                       );
                     })}
