@@ -63,4 +63,16 @@ describe("personSkillRows across a person's records (opened from Find technician
     ]);
     expect(rows.find((r) => r.definition.id === "WELD")!.certificates.map((c) => c.fileName)).toEqual(["weld.pdf"]);
   });
+
+  it("lists every assignment when the same skill is on two of her records, each with its own certificates", () => {
+    const both: Record<string, ReturnType<typeof assignment>> = {
+      "annaU|WELD": assignment("S3", "WELD", "2026-01-01"), // expired, on the ERP user record
+      "annaE|WELD": assignment("S1", "WELD", "2027-06-01"), // renewed, with weld.pdf, on the Employee record
+    };
+    const twoRows = personSkillRows(["annaU", "annaE"], definitions, (p, t) => both[`${p}|${t}`], certificates, TODAY).filter((r) => r.definition.id === "WELD");
+    expect(twoRows.map((r) => [r.holderId, r.status, r.certificates.map((c) => c.fileName)])).toEqual([
+      ["annaU", "expired", []],
+      ["annaE", "valid", ["weld.pdf"]],
+    ]);
+  });
 });

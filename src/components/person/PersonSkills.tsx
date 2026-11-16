@@ -15,15 +15,17 @@ import { t } from "@/lib/i18n/t";
 interface PersonSkillsProps {
   personName: string;
   rows: PersonSkillRow<SkillDefinition>[];
+  /** "ERP user", "Employee": shown next to a skill that two of the person's records hold. */
+  recordLabel?: (recordId: string) => string;
   /**
    * Edit or assign one skill. Leave it out for a read-only list (e.g. a later "my skills" view for
    * technicians): then no Edit or Assign buttons are shown, only status, dates and certificates.
    */
-  onOpenSkill?: (definition: SkillDefinition) => void;
+  onOpenSkill?: (definition: SkillDefinition, recordId: string) => void;
 }
 
 /** All skills of one person: status, valid from/to, level and certificates (open or download). */
-export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProps) {
+export function PersonSkills({ personName, rows, recordLabel, onOpenSkill }: PersonSkillsProps) {
   const [previewed, setPreviewed] = useState<Certificate | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -47,10 +49,11 @@ export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProp
           </TableHeaderRow>
         }
       >
-        {rows.map(({ definition, assignment, status, certificates }) => (
-          <TableRow key={definition.id} rowKey={definition.id}>
+        {rows.map(({ definition, assignment, status, certificates, holderId, heldTwice }) => (
+          <TableRow key={`${definition.id}|${holderId}`} rowKey={`${definition.id}|${holderId}`}>
             <TableCell>
               <Text style={{ fontWeight: "bold" }}>{definition.name}</Text>
+              {heldTwice && recordLabel && <Text className={styles.muted}> · {recordLabel(holderId)}</Text>}
             </TableCell>
             <TableCell>
               <span className={styles.status} style={{ color: STATUS_DISPLAY[status].color }}>
@@ -94,7 +97,7 @@ export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProp
                 <Button
                   design="Transparent"
                   icon={assignment ? "edit" : "add"}
-                  onClick={() => onOpenSkill(definition)}
+                  onClick={() => onOpenSkill(definition, holderId)}
                   accessibleName={
                     assignment
                       ? t("personView.editLabel", { skill: definition.name, person: personName })

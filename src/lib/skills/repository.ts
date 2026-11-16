@@ -248,8 +248,7 @@ export async function deleteSkillDefinition(tagId: string, confirmed: Pick<Delet
       done.certificates += await deleteLateCertificates(skillIds);
       const res = await skillApi<BulkResponse>("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) });
       done.assignments = res.results.filter((r) => r.status < 400).length; // counted before a partial failure throws
-      assertBulkOk(res);
-      await assertNoCertificateLeft(skillIds);
+      await settleBulkDelete(res, skillIds, done.assignments);
     }
     assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
     return done;
@@ -279,6 +278,29 @@ async function deleteLateCertificates(skillIds: string[]): Promise<number> {
 async function assertNoCertificateLeft(skillIds: string[]): Promise<void> {
   const left = await loadCertificates(skillIds);
   if (left.length) throw new Error(tn("delete.leftover", left.length));
+}
+
+/**
+ * After the bulk delete of assignments: its failure, if any, together with a certificate left behind
+ * on an assignment that was deleted (also when only some were). If none was deleted, none can be
+ * orphaned. A failed look does not hide the bulk failure.
+ */
+async function settleBulkDelete(res: BulkResponse, skillIds: string[], deleted: number): Promise<void> {
+  let leftover = "";
+  if (deleted > 0) {
+    const left = await loadCertificates(skillIds).catch((e: unknown) => {
+      if (!res.hasErrors) throw e;
+      return [];
+    });
+    if (left.length) leftover = tn("delete.leftover", left.length);
+  }
+  try {
+    assertBulkOk(res);
+  } catch (e) {
+    if (leftover) throw new Error(`${e instanceof Error ? e.message : String(e)} ${leftover}`);
+    throw e;
+  }
+  if (leftover) throw new Error(leftover);
 }
 
 /** Adds "already deleted: …" to an error from a cascade that stopped half-way. */

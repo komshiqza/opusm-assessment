@@ -58,10 +58,8 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
       <PersonSkills
         personName={person.name}
         rows={rows}
-        onOpenSkill={(definition) => {
-          const holderId = rows.find((r) => r.definition.id === definition.id)?.holderId;
-          onOpenCell(records.find((r) => r.id === holderId) ?? person, definition);
-        }}
+        recordLabel={(recordId) => formatPersonType(records.find((r) => r.id === recordId)?.type ?? null)}
+        onOpenSkill={(definition, recordId) => onOpenCell(records.find((r) => r.id === recordId) ?? person, definition)}
       />
     </Dialog>
   );
