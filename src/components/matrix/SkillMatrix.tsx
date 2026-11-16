@@ -14,18 +14,24 @@ import {
   SegmentedButtonItem,
   Select,
   Text,
+  ToggleButton,
 } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, todayIso, type AssignmentStatus } from "@/lib/domain/status";
 import { formatPersonType } from "@/lib/format";
 import { personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
-import { PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
+import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
+import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
-import { STATUS_DISPLAY, statusText } from "./statusDisplay";
+import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import styles from "./SkillMatrix.module.css";
 
 type StatusFilter = "all" | AssignmentStatus;
+
+/** The status counters are filter buttons, coloured like their status (always with icon and text). */
+const COUNTER_STATUSES = ["expiring", "expired", "valid", "upcoming"] as const;
+const COUNTER_DESIGN = { expiring: "Attention", expired: "Negative", valid: "Positive", upcoming: "Default" } as const;
 
 interface SkillMatrixProps {
   state: SkillDataState;
@@ -41,6 +47,9 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   const [showAllRecords, setShowAllRecords] = usePageState("matrix.showAllRecords", false);
   const today = todayIso();
   const isPhone = useMediaQuery(PHONE_QUERY);
+  /** Below 1280 px: icon plus short date, narrower columns (the phone has its own cards). */
+  const isCompact = useMediaQuery(COMPACT_QUERY) && !isPhone;
+  const [scrollerRef, canScrollRight] = useCanScrollRight();
 
   const definitions = useMemo(() => data?.definitions ?? [], [data]);
   const visibleSkills = useMemo(() => (skillIds.length ? definitions.filter((d) => skillIds.includes(d.id)) : definitions), [definitions, skillIds]);
@@ -90,22 +99,26 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
     const status = getAssignmentStatus(assignment, today);
     const certCount = assignment ? (certificatesBySkill.get(assignment.id)?.length ?? 0) : 0;
     const text = statusText(status, assignment);
+    const shortText = compactStatusText(status, assignment);
     const label = assignment
       ? `${p.name}, ${d.name}: ${text}${assignment.proficiencyName ? `, level ${assignment.proficiencyName}` : ""}, ${certCount ? `${certCount} certificate(s)` : "no certificate"}. Edit.`
       : `${p.name}, ${d.name}: not assigned. Assign.`;
-    return { assignment, status, certCount, display: STATUS_DISPLAY[status], text, label };
+    return { assignment, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
   };
 
-  /** Status, end date, level and certificates; shared by the table cells and the phone cards. */
-  const cellContent = (info: ReturnType<typeof cellInfo>) =>
+  /**
+   * Status, end date, level and certificates; shared by the table cells and the phone cards.
+   * Compact: the date only and the level cut short if needed; the full text is in the cell's tooltip and label.
+   */
+  const cellContent = (info: ReturnType<typeof cellInfo>, compact = false) =>
     info.assignment ? (
       <>
         <span className={styles.cellStatus} style={{ color: info.display.color }}>
           <Icon name={info.display.icon} className={styles.cellIcon} style={{ color: "inherit" }} />
-          {info.text}
+          {compact ? info.shortText : info.text}
         </span>
         <span className={styles.cellMeta}>
-          <span>{info.assignment.proficiencyName ?? "No level"}</span>
+          <span className={styles.level}>{info.assignment.proficiencyName ?? "No level"}</span>
           {info.certCount > 0 && (
             <span className={styles.cert}>
               <Icon name="attachment" className={styles.cellIcon} />
@@ -195,22 +208,18 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
       </div>
 
       <div className={styles.summary} aria-live="polite">
-        {(["expiring", "expired", "valid", "upcoming"] as const)
-          .filter((s) => s !== "upcoming" || counts.upcoming > 0)
-          .map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={styles.summaryChip}
-              style={{ color: STATUS_DISPLAY[s].color }}
-              aria-pressed={statusFilter === s}
-              onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-              title={`Show persons with status “${STATUS_DISPLAY[s].label}”`}
-            >
-              <Icon name={STATUS_DISPLAY[s].icon} className={styles.chipIcon} style={{ color: "inherit" }} />
-              {counts[s]} {STATUS_DISPLAY[s].label.toLowerCase()}
-            </button>
-          ))}
+        {COUNTER_STATUSES.filter((s) => s !== "upcoming" || counts.upcoming > 0 || statusFilter === "upcoming").map((s) => (
+          <ToggleButton
+            key={s}
+            design={COUNTER_DESIGN[s]}
+            icon={STATUS_DISPLAY[s].icon}
+            pressed={statusFilter === s}
+            onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+            tooltip={statusFilter === s ? "Show all persons again" : `Show only persons with status “${STATUS_DISPLAY[s].label}”`}
+          >
+            {counts[s]} {STATUS_DISPLAY[s].label.toLowerCase()}
+          </ToggleButton>
+        ))}
         <span className={styles.legend}>
           <Icon name="attachment" className={styles.chipIcon} /> = certificate attached ·{" "}
           {isPhone ? "tap a skill to edit, “+” to assign" : "click a cell to assign or edit"}
@@ -264,47 +273,58 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
           ))}
         </ul>
       ) : (
-        <div className={styles.scroller}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th scope="col" className={styles.corner}>
-                  Person
-                </th>
-                {visibleSkills.map((d) => (
-                  <th key={d.id} scope="col" className={styles.skillHeader} title={d.description ?? d.name}>
-                    {d.name}
+        <div className={styles.scrollFrame} data-more-right={canScrollRight || undefined}>
+          <div className={styles.scroller} ref={scrollerRef}>
+            <table className={styles.table} data-compact={isCompact || undefined}>
+              <thead>
+                <tr>
+                  <th scope="col" className={styles.corner}>
+                    Person
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visiblePersons.map((p) => (
-                <tr key={p.id}>
-                  <th scope="row" className={styles.personCell}>
-                    <span className={styles.personName}>{p.name}</span>
-                    <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
-                  </th>
-                  {visibleSkills.map((d) => {
-                    const info = cellInfo(p, d);
-                    return (
-                      <td key={d.id} className={styles.cell} data-status={info.status}>
-                        <button
-                          type="button"
-                          className={styles.cellButton}
-                          onClick={() => onOpenCell(p, d)}
-                          aria-label={info.label}
-                          title={info.label}
-                        >
-                          {cellContent(info)}
-                        </button>
-                      </td>
-                    );
-                  })}
+                  {visibleSkills.map((d) => (
+                    <th key={d.id} scope="col" className={styles.skillHeader} title={d.description ?? d.name}>
+                      {d.name}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visiblePersons.map((p) => (
+                  <tr key={p.id}>
+                    <th scope="row" className={styles.personCell}>
+                      <span className={styles.personName}>{p.name}</span>
+                      <span className={styles.personMeta}>
+                        {/* The job title is hidden below 1024 px; the record type keeps linked records apart. */}
+                        {p.jobTitle && (
+                          <span className={styles.jobTitle}>
+                            {p.jobTitle}
+                            {p.type ? " · " : ""}
+                          </span>
+                        )}
+                        {formatPersonType(p.type)}
+                      </span>
+                    </th>
+                    {visibleSkills.map((d) => {
+                      const info = cellInfo(p, d);
+                      return (
+                        <td key={d.id} className={styles.cell} data-status={info.status}>
+                          <button
+                            type="button"
+                            className={styles.cellButton}
+                            onClick={() => onOpenCell(p, d)}
+                            aria-label={info.label}
+                            title={info.label}
+                          >
+                            {cellContent(info, isCompact)}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

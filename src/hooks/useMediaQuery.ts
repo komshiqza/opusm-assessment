@@ -24,3 +24,6 @@ export const PHONE_QUERY = "(max-width: 599px)";
 
 /** Below tablet width: the full tab names no longer fit next to each other. */
 export const NARROW_QUERY = "(max-width: 767px)";
+
+/** Below a wide desktop: matrix cells switch to a compact form so all skill columns fit at 1024 px. */
+export const COMPACT_QUERY = "(max-width: 1279px)";

@@ -19,3 +19,18 @@ export function statusText(status: AssignmentStatus, assignment: { startDate: st
   if (status === "valid") return endDate ? `Valid to ${formatDate(endDate)}` : "Valid, no end";
   return "";
 }
+
+/** "2027-09-12" → "12.09.27": the date in a narrow matrix cell. */
+function shortDate(iso: string | null | undefined): string {
+  return formatDate(iso).replace(/\.\d{2}(\d{2})$/, ".$1");
+}
+
+/**
+ * Narrow matrix cells: the date only, next to the status icon ("12.09.27"). The start date for a skill
+ * that starts later, otherwise the end date. The full text stays in the cell's tooltip and screen-reader label.
+ */
+export function compactStatusText(status: AssignmentStatus, assignment: { startDate: string | null; endDate: string | null } | null | undefined): string {
+  if (status === "none") return "";
+  if (status === "upcoming") return shortDate(assignment?.startDate);
+  return assignment?.endDate ? shortDate(assignment.endDate) : "No end";
+}
