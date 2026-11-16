@@ -5,6 +5,7 @@
  * See docs/FSM_GUIDE.md for the data model, CoreSQL examples and attachment handling.
  */
 import { DTO, dtosParam, type DtoEntity } from "./dtos";
+import { t } from "@/lib/i18n/t";
 
 export class FsmError extends Error {
   constructor(
@@ -28,8 +29,8 @@ export class FsmTimeoutError extends FsmError {
   constructor(public readonly write: boolean) {
     super(
       write
-        ? `FSM did not answer within ${FSM_TIMEOUT_MS / 1000} seconds. The change may have been saved or not, and FSM may still finish it in the next minutes: reload in a minute to check before you try again.`
-        : `FSM did not answer within ${FSM_TIMEOUT_MS / 1000} seconds. Try again.`,
+        ? t("fsm.timeoutWrite", { seconds: FSM_TIMEOUT_MS / 1000 })
+        : t("fsm.timeoutRead", { seconds: FSM_TIMEOUT_MS / 1000 }),
       0,
     );
     this.name = "FsmTimeoutError";

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Bar, BusyIndicator, Button, Dialog, MessageStrip, Text } from "@ui5/webcomponents-react";
 import { toUserMessage } from "@/lib/errors";
 import { createOperationLock } from "@/lib/operationLock";
+import { t } from "@/lib/i18n/t";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -68,7 +69,7 @@ export function ConfirmDialog({ open, title, children, confirmText, onConfirm, o
                 {confirmText}
               </Button>
               <Button design="Transparent" onClick={close} disabled={busy}>
-                Cancel
+                {t("common.cancel")}
               </Button>
             </>
           }

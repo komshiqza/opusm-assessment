@@ -5,6 +5,7 @@
  */
 import { daysBetween, normalizeEndDate } from "./status";
 import { formatDate } from "@/lib/format";
+import { t, tn } from "@/lib/i18n/t";
 
 interface HeldSkill {
   startDate: string | null;
@@ -28,18 +29,22 @@ export function checkSkillForJob(
   today: string,
   minLevel: { level: number; name: string } | null,
 ): SkillCheck {
-  if (!held) return { ok: false, reason: `Missing: ${skill.name}`, missing: true };
+  if (!held) return { ok: false, reason: t("match.missing", { skill: skill.name }), missing: true };
   const end = normalizeEndDate(held.endDate);
   if (end && end < jobDate) {
-    if (end < today) return { ok: false, reason: `${skill.name} expired on ${formatDate(end)}`, missing: false };
+    if (end < today) return { ok: false, reason: t("match.expiredOn", { skill: skill.name, date: formatDate(end) }), missing: false };
     const days = daysBetween(end, jobDate);
-    return { ok: false, reason: `${skill.name} ends ${days} day${days === 1 ? "" : "s"} before the job`, missing: false };
+    return { ok: false, reason: tn("match.endsBefore", days, { skill: skill.name }), missing: false };
   }
   if (held.startDate && held.startDate > jobDate) {
-    return { ok: false, reason: `${skill.name} is valid only from ${formatDate(held.startDate)}`, missing: false };
+    return { ok: false, reason: t("match.validFrom", { skill: skill.name, date: formatDate(held.startDate) }), missing: false };
   }
   if (minLevel && (held.proficiencyLevel ?? 0) < minLevel.level) {
-    return { ok: false, reason: `${skill.name}: ${held.proficiencyName ?? "no level"}, ${minLevel.name} needed`, missing: false };
+    return {
+      ok: false,
+      reason: t("match.levelNeeded", { skill: skill.name, level: held.proficiencyName ?? t("match.noLevel"), needed: minLevel.name }),
+      missing: false,
+    };
   }
   return { ok: true, reason: null, missing: false };
 }
@@ -92,5 +97,5 @@ export function matchTechnicians<P extends { id: string; name: string }, S exten
 /** "Advanced or higher" in the "Minimum level" choices; the highest level of the scale is just its name. */
 export function minimumLevelLabel(level: { level: number; name: string }, scale: { level: number }[]): string {
   const highest = Math.max(...scale.map((l) => l.level));
-  return level.level >= highest ? level.name : `${level.name} or higher`;
+  return level.level >= highest ? level.name : t("find.orHigher", { level: level.name });
 }

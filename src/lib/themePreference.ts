@@ -13,11 +13,6 @@ export const UI5_THEME: Record<ThemeChoice, string> = {
   dark: "sap_horizon_dark",
 };
 
-export const THEME_LABELS: Record<ThemeChoice, string> = {
-  light: "Light (Morning Horizon)",
-  dark: "Dark (Evening Horizon)",
-};
-
 /** The browser's own color-scheme for each choice: native scrollbars and the page background before the theme loads. */
 export const COLOR_SCHEME: Record<ThemeChoice, string> = { light: "light", dark: "dark" };
 

@@ -6,6 +6,7 @@
  * first bytes are a real PDF/PNG/JPEG, the content type matches the extension, and (on the server)
  * the declared FSM `type` matches the content.
  */
+import { t } from "@/lib/i18n/t";
 
 /** The brief's limit per certificate file, on the original (decoded) file. */
 export const MAX_CERTIFICATE_BYTES = 5 * 1024 * 1024;
@@ -46,19 +47,19 @@ export type CertificateCheck = { ok: true; type: CertificateType } | { ok: false
 export function checkCertificate(file: { fileName: string; size: number; head: Uint8Array; declaredType?: string }): CertificateCheck {
   const { fileName, size, head, declaredType } = file;
   const byName = typeFromFileName(fileName);
-  if (!byName) return { ok: false, error: `${fileName}: only PDF, JPG and PNG files are allowed.` };
-  if (size <= 0) return { ok: false, error: `${fileName}: the file is empty.` };
+  if (!byName) return { ok: false, error: t("file.wrongType", { name: fileName }) };
+  if (size <= 0) return { ok: false, error: t("file.empty", { name: fileName }) };
   if (size > MAX_CERTIFICATE_BYTES) {
     const mb = (size / 1024 / 1024).toFixed(1);
-    return { ok: false, tooLarge: true, error: `${fileName}: ${mb} MB is larger than ${MAX_CERTIFICATE_LABEL}, the limit per certificate.` };
+    return { ok: false, tooLarge: true, error: t("file.tooLarge", { name: fileName, mb, max: MAX_CERTIFICATE_LABEL }) };
   }
   const byContent = typeFromContent(head);
-  if (!byContent) return { ok: false, error: `${fileName}: the content is not a PDF, JPG or PNG file (it may have been renamed).` };
+  if (!byContent) return { ok: false, error: t("file.notCertificate", { name: fileName }) };
   if (byContent !== byName) {
-    return { ok: false, error: `${fileName}: the content is a ${TYPE_WORD[byContent]}, but the name ends in .${fileName.split(".").pop()}.` };
+    return { ok: false, error: t("file.nameMismatch", { name: fileName, type: TYPE_WORD[byContent], ending: fileName.split(".").pop() ?? "" }) };
   }
   if (declaredType !== undefined && declaredType !== byContent) {
-    return { ok: false, error: `${fileName}: the declared type ${declaredType} does not match the content (${byContent}).` };
+    return { ok: false, error: t("file.declaredMismatch", { name: fileName, declared: declaredType, type: byContent }) };
   }
   return { ok: true, type: byContent };
 }

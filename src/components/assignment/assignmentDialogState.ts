@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n/t";
+
 /**
  * The main button of the assignment dialog. The list (and so `listed`) can be out of date when a
  * reload after a write failed, so the dialog also remembers what it did itself.
@@ -48,7 +50,7 @@ export function levelChoices<L extends { id: string; name: string }>(
   assignment: { proficiencyId: string | null } | undefined,
   levels: L[],
 ): { id: string; name: string }[] {
-  return assignment && !assignment.proficiencyId ? [{ id: "", name: "No level" }, ...levels] : levels;
+  return assignment && !assignment.proficiencyId ? [{ id: "", name: t("assign.noLevelOption") }, ...levels] : levels;
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { UploadOutcome } from "@/lib/skills/repository";
+import { t } from "@/lib/i18n/t";
 
 /** Upload results a dialog shows until the user dismisses them. */
 export interface UploadResults {
@@ -42,20 +43,20 @@ export interface ResultLine {
  */
 export function resultLines(results: UploadResults): ResultLine[] {
   return [
-    ...results.confirmedLate.map((name): ResultLine => ({ kind: "uploaded", text: `${name} uploaded.`, file: null })),
+    ...results.confirmedLate.map((name): ResultLine => ({ kind: "uploaded", text: t("result.uploaded", { name }), file: null })),
     ...results.failed.map(
       (f): ResultLine =>
         f.uploadId !== undefined
-          ? { kind: "notUploaded", text: `${f.file.name} was not uploaded.`, detail: f.error, file: f.file }
-          : { kind: "notUploaded", text: `${f.file.name} was not uploaded: ${f.error}`, file: f.file },
+          ? { kind: "notUploaded", text: t("result.notUploaded", { name: f.file.name }), detail: f.error, file: f.file }
+          : { kind: "notUploaded", text: t("result.notUploadedReason", { name: f.file.name, reason: f.error }), file: f.file },
     ),
-    ...results.unconfirmed.map((u): ResultLine => ({ kind: "unconfirmed", text: `Couldn’t confirm ${u.file.name}.`, detail: u.error, file: u.file })),
+    ...results.unconfirmed.map((u): ResultLine => ({ kind: "unconfirmed", text: t("result.unconfirmed", { name: u.file.name }), detail: u.error, file: u.file })),
   ];
 }
 
 /** The same three lines for a new assignment FSM answered too late for. */
 export function createResultLine(check: { result: "done" | "notDone" | "unconfirmed"; error?: string }): Omit<ResultLine, "file"> {
-  if (check.result === "done") return { kind: "uploaded", text: "Skill assigned." };
-  if (check.result === "notDone") return { kind: "notUploaded", text: "The skill was not assigned." };
-  return { kind: "unconfirmed", text: "Couldn’t confirm the assignment.", detail: check.error };
+  if (check.result === "done") return { kind: "uploaded", text: t("result.assigned") };
+  if (check.result === "notDone") return { kind: "notUploaded", text: t("result.notAssigned") };
+  return { kind: "unconfirmed", text: t("result.assignUnconfirmed"), detail: check.error };
 }

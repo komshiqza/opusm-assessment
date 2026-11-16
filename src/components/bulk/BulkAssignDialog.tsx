@@ -28,6 +28,8 @@ import type { Person } from "@/lib/skills/types";
 import { useToast } from "@/components/common/Toast";
 import { mergeResults, planBulk } from "./bulkPlan";
 import styles from "./BulkAssignDialog.module.css";
+import { t, tn } from "@/lib/i18n/t";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 interface BulkAssignDialogProps {
   /** The persons shown in the matrix right now (current filters and "Show" choice). */
@@ -36,11 +38,11 @@ interface BulkAssignDialogProps {
   onClose: () => void;
 }
 
-const RESULT_LINE: Record<BulkResult["result"], { icon: string; color: string; text: string }> = {
-  assigned: { icon: "sys-enter-2", color: "var(--sapPositiveTextColor)", text: "Assigned" },
-  skipped: { icon: "less", color: "var(--sapContent_LabelColor)", text: "Skipped: already has it" },
-  failed: { icon: "error", color: "var(--sapNegativeTextColor)", text: "Not assigned" },
-  unconfirmed: { icon: "alert", color: "var(--sapCriticalTextColor)", text: "Couldn’t confirm" },
+const RESULT_LINE: Record<BulkResult["result"], { icon: string; color: string; text: MessageKey }> = {
+  assigned: { icon: "sys-enter-2", color: "var(--sapPositiveTextColor)", text: "bulk.assigned" },
+  skipped: { icon: "less", color: "var(--sapContent_LabelColor)", text: "bulk.skipped" },
+  failed: { icon: "error", color: "var(--sapNegativeTextColor)", text: "bulk.failed" },
+  unconfirmed: { icon: "alert", color: "var(--sapCriticalTextColor)", text: "bulk.unconfirmed" },
 };
 
 /**
@@ -80,7 +82,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
     try {
       await work();
       setProgress("Refreshing…");
-      if (!(await state.reload())) setError("The assignments are saved, but the list could not be refreshed from FSM. Close this dialog and use “Try again” on the page.");
+      if (!(await state.reload())) setError(t("bulk.notRefreshed"));
     } catch (e) {
       setError(toUserMessage(e));
     } finally {
@@ -93,23 +95,23 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
   const assign = () =>
     run(async () => {
       if (!definition || dateError || plan.toAssign.length === 0 || plan.overLimit) return;
-      const done = await bulkAssign(definition.id, plan.toAssign, input, (i, total) => setProgress(`Assigning ${i + 1} of ${total}…`));
+      const done = await bulkAssign(definition.id, plan.toAssign, input, (i, total) => setProgress(t("bulk.progress", { i: i + 1, total })));
       setResults([...done, ...plan.skip.map((personId): BulkResult => ({ personId, result: "skipped" }))]);
       const assigned = done.filter((r) => r.result === "assigned").length;
-      if (assigned) toast(`${definition.name} assigned to ${assigned} person${assigned > 1 ? "s" : ""}`);
+      if (assigned) toast(tn("bulk.toastAssigned", assigned, { skill: definition.name }));
     });
 
   const retryFailed = () =>
     run(async () => {
       if (!definition || !results) return;
-      setProgress("Trying again…");
+      setProgress(t("bulk.tryingAgain"));
       setResults(mergeResults(results, await retryBulk(definition.id, results.filter((r) => r.result === "failed"), input)));
     });
 
   const checkAgain = () =>
     run(async () => {
       if (!definition || !results) return;
-      setProgress("Checking in FSM…");
+      setProgress(t("common.checkingFsm"));
       setResults(mergeResults(results, await recheckBulk(definition.id, results.filter((r) => r.result === "unconfirmed"))));
     });
 
@@ -119,7 +121,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
   return (
     <Dialog
       open
-      headerText="Assign a skill to several persons"
+      headerText={t("bulk.title")}
       onBeforeClose={(e) => (busy || operationRef.current) && e.preventDefault()}
       onClose={onClose}
       className={styles.dialog}
@@ -135,11 +137,11 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
                   onClick={assign}
                   disabled={busy || !definition || Boolean(dateError) || plan.toAssign.length === 0 || plan.overLimit}
                 >
-                  {plan.toAssign.length ? `Assign to ${plan.toAssign.length}` : "Assign"}
+                  {plan.toAssign.length ? t("bulk.assignTo", { n: plan.toAssign.length }) : t("common.assign")}
                 </Button>
               )}
               <Button design="Transparent" onClick={() => !operationRef.current && onClose()} disabled={busy}>
-                {results ? "Close" : "Cancel"}
+                {results ? t("common.close") : t("common.cancel")}
               </Button>
             </>
           }
@@ -150,16 +152,20 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
         {results ? (
           <div className={styles.body}>
             <Text>
-              {definition?.name}: {formatDate(input.startDate ?? today)} – {input.endDate ? formatDate(input.endDate) : "no end date"}
+              {t("bulk.period", {
+                skill: definition?.name ?? "",
+                from: formatDate(input.startDate ?? today),
+                to: input.endDate ? formatDate(input.endDate) : t("bulk.noEnd"),
+              })}
             </Text>
             <ul className={styles.results}>
               {results.map((r) => (
                 <li key={r.personId} title={r.error}>
                   <Icon name={RESULT_LINE[r.result].icon} className={styles.icon} style={{ color: RESULT_LINE[r.result].color }} />
                   <span>
-                    <b>{nameOf(r.personId)}</b> · {RESULT_LINE[r.result].text}
+                    <b>{nameOf(r.personId)}</b> · {t(RESULT_LINE[r.result].text)}
                     {r.result === "failed" && r.error && !r.checkFirst ? `: ${r.error}` : ""}
-                    {r.error && <span className={styles.srOnly}> Details: {r.error}</span>}
+                    {r.error && <span className={styles.srOnly}> {t("common.details")}: {r.error}</span>}
                   </span>
                 </li>
               ))}
@@ -167,12 +173,12 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
             <div className={styles.actions}>
               {failedCount > 0 && (
                 <Button icon="refresh" onClick={retryFailed} disabled={busy}>
-                  Try again for {failedCount}
+                  {t("bulk.retry", { n: failedCount })}
                 </Button>
               )}
               {unconfirmedCount > 0 && (
                 <Button icon="refresh" onClick={checkAgain} disabled={busy}>
-                  Check again for {unconfirmedCount}
+                  {t("bulk.checkAgain", { n: unconfirmedCount })}
                 </Button>
               )}
             </div>
@@ -182,10 +188,10 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
           <div className={styles.body}>
             <div className={styles.field}>
               <Label for="bulk-skill" required showColon>
-                Skill
+                {t("common.skill")}
               </Label>
               <Select id="bulk-skill" value={skillId} onChange={(e) => setSkillId(e.detail.selectedOption.value ?? "")}>
-                <Option value="">Choose a skill</Option>
+                <Option value="">{t("bulk.chooseSkill")}</Option>
                 {definitions.map((d) => (
                   <Option key={d.id} value={d.id}>
                     {d.name}
@@ -196,7 +202,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
             {definitionLevels.length > 0 && (
               <div className={styles.field}>
                 <Label id="bulk-level-label" showColon>
-                  Proficiency level
+                  {t("assign.level")}
                 </Label>
                 <SegmentedButton accessibleNameRef="bulk-level-label" onSelectionChange={(e) => setLevelId(e.detail.selectedItems[0]?.dataset.id ?? "")}>
                   {definitionLevels.map((l) => (
@@ -210,27 +216,27 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
             <div className={styles.dates}>
               <div className={styles.field}>
                 <Label for="bulk-from" showColon>
-                  Valid from
+                  {t("common.validFrom")}
                 </Label>
                 <DatePicker
                   id="bulk-from"
                   value={from}
                   valueFormat="yyyy-MM-dd"
                   displayFormat="dd.MM.yyyy"
-                  placeholder={`Today (${formatDate(today)}) if empty`}
+                  placeholder={t("assign.fromPlaceholder", { date: formatDate(today) })}
                   onChange={(e) => setFrom(e.target.value ?? "")}
                 />
               </div>
               <div className={styles.field}>
                 <Label for="bulk-to" showColon>
-                  Valid to
+                  {t("common.validTo")}
                 </Label>
                 <DatePicker
                   id="bulk-to"
                   value={to}
                   valueFormat="yyyy-MM-dd"
                   displayFormat="dd.MM.yyyy"
-                  placeholder="No end date if empty"
+                  placeholder={t("assign.toPlaceholder")}
                   valueState={dateError ? "Negative" : "None"}
                   onChange={(e) => setTo(e.target.value ?? "")}
                 />
@@ -242,7 +248,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
               </MessageStrip>
             )}
             <div className={styles.field}>
-              <Label showColon>Persons (from the matrix as filtered now)</Label>
+              <Label showColon>{t("bulk.persons")}</Label>
               <List
                 selectionMode="Multiple"
                 className={styles.persons}
@@ -254,7 +260,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
                     data-id={p.id}
                     selected={selected.includes(p.id)}
                     description={p.jobTitle ?? undefined}
-                    additionalText={hasSkill(p.id) ? "Already has it" : undefined}
+                    additionalText={hasSkill(p.id) ? t("bulk.alreadyHas") : undefined}
                   >
                     {p.name}
                   </ListItemStandard>
@@ -263,10 +269,10 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
             </div>
             <MessageStrip design={plan.overLimit ? "Negative" : "Information"} hideCloseButton>
               {!definition
-                ? "Choose a skill and the persons."
+                ? t("bulk.chooseFirst")
                 : plan.overLimit
-                  ? `At most ${BULK_LIMIT} persons at once (selected to assign: ${plan.toAssign.length}).`
-                  : `Assign to ${plan.toAssign.length}, skip ${plan.skip.length} who already ${plan.skip.length === 1 ? "has" : "have"} it. No certificates here: add them per person afterwards.`}
+                  ? t("bulk.overLimit", { max: BULK_LIMIT, n: plan.toAssign.length })
+                  : t("bulk.preview", { n: plan.toAssign.length, skip: plan.skip.length })}
             </MessageStrip>
             {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
           </div>

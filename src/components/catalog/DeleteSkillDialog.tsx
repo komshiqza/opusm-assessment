@@ -6,6 +6,7 @@ import { DeleteImpactChangedError, deleteSkillDefinition, getDeleteImpact, type 
 import { toUserMessage } from "@/lib/errors";
 import type { SkillDefinition } from "@/lib/skills/types";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { t, tn } from "@/lib/i18n/t";
 
 interface DeleteSkillDialogProps {
   skill: SkillDefinition;
@@ -47,14 +48,12 @@ export function DeleteSkillDialog({ skill, onDeleted, reload, onClose }: DeleteS
   }, [skill.id]);
 
   const inUse = impact && impact.assignments > 0;
-  const confirmText = inUse
-    ? `Delete skill and ${impact.assignments} assignment${impact.assignments > 1 ? "s" : ""}`
-    : "Delete skill";
+  const confirmText = inUse ? tn("deleteDialog.buttonWith", impact.assignments) : t("deleteDialog.button");
 
   return (
     <ConfirmDialog
       open
-      title={`Delete “${skill.name}”?`}
+      title={t("deleteDialog.title", { name: skill.name })}
       confirmText={confirmText}
       confirmDisabled={!impact}
       onClose={onClose}
@@ -78,20 +77,22 @@ export function DeleteSkillDialog({ skill, onDeleted, reload, onClose }: DeleteS
       <>
         {!impact && !loadError && (
           <BusyIndicator active delay={0} style={{ display: "block", minHeight: "2rem" }}>
-            <Text>Checking where this skill is used…</Text>
+            <Text>{t("deleteDialog.checking")}</Text>
           </BusyIndicator>
         )}
         {loadError && (
           <MessageStrip design="Negative" hideCloseButton>
-            Could not check the assignments of this skill: {loadError}
+            {t("deleteDialog.checkFailed", { error: loadError })}
           </MessageStrip>
         )}
-        {impact && !inUse && <Text>The skill is not assigned to anyone. It will be deleted from FSM. This cannot be undone.</Text>}
+        {impact && !inUse && <Text>{t("deleteDialog.unused")}</Text>}
         {impact && inUse && (
           <MessageStrip design="Critical" hideCloseButton>
-            This skill is assigned to {impact.assignments} person{impact.assignments > 1 ? "s" : ""}
-            {impact.certificates ? ` with ${impact.certificates} certificate${impact.certificates > 1 ? "s" : ""}` : ""}. Deleting it also removes
-            these assignments{impact.certificates ? " and certificates" : ""}. This cannot be undone.
+            {t("deleteDialog.inUse", {
+              assignments: tn("catalogue.persons", impact.assignments),
+              certificates: impact.certificates ? t("deleteDialog.inUseCertificates", { n: impact.certificates }) : "",
+              andCertificates: impact.certificates ? t("deleteDialog.andCertificates") : "",
+            })}
           </MessageStrip>
         )}
       </>

@@ -10,6 +10,7 @@ import { CertificatePreview } from "@/components/assignment/CertificatePreview";
 import { saveCertificate } from "@/components/assignment/saveCertificate";
 import type { PersonSkillRow } from "./personSkillRows";
 import styles from "./PersonSkills.module.css";
+import { t } from "@/lib/i18n/t";
 
 interface PersonSkillsProps {
   personName: string;
@@ -32,15 +33,15 @@ export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProp
         overflowMode="Popin"
         headerRow={
           <TableHeaderRow>
-            <TableHeaderCell minWidth="10rem">Skill</TableHeaderCell>
-            <TableHeaderCell minWidth="11rem">Status</TableHeaderCell>
-            <TableHeaderCell minWidth="7rem">Valid from</TableHeaderCell>
-            <TableHeaderCell minWidth="7rem">Valid to</TableHeaderCell>
-            <TableHeaderCell minWidth="6rem">Level</TableHeaderCell>
-            <TableHeaderCell minWidth="12rem">Certificates</TableHeaderCell>
+            <TableHeaderCell minWidth="10rem">{t("common.skill")}</TableHeaderCell>
+            <TableHeaderCell minWidth="11rem">{t("common.status")}</TableHeaderCell>
+            <TableHeaderCell minWidth="7rem">{t("common.validFrom")}</TableHeaderCell>
+            <TableHeaderCell minWidth="7rem">{t("common.validTo")}</TableHeaderCell>
+            <TableHeaderCell minWidth="6rem">{t("common.level")}</TableHeaderCell>
+            <TableHeaderCell minWidth="12rem">{t("common.certificates")}</TableHeaderCell>
             {onOpenSkill ? (
-              <TableHeaderCell minWidth="7rem" horizontalAlign="End">
-                Actions
+              <TableHeaderCell minWidth="9rem" horizontalAlign="End">
+                {t("common.actions")}
               </TableHeaderCell>
             ) : null}
           </TableHeaderRow>
@@ -61,26 +62,26 @@ export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProp
               <Text>{assignment ? formatDate(assignment.startDate) || "–" : "–"}</Text>
             </TableCell>
             <TableCell>
-              <Text>{assignment ? (assignment.endDate ? formatDate(assignment.endDate) : "No end date") : "–"}</Text>
+              <Text>{assignment ? (assignment.endDate ? formatDate(assignment.endDate) : t("common.noEndDate")) : "–"}</Text>
             </TableCell>
             <TableCell>
-              <Text>{assignment ? (assignment.proficiencyName ?? "No level") : "–"}</Text>
+              <Text>{assignment ? (assignment.proficiencyName ?? t("common.noLevel")) : "–"}</Text>
             </TableCell>
             <TableCell>
               {certificates.length === 0 ? (
-                <Text>{assignment ? "None" : "–"}</Text>
+                <Text>{assignment ? t("common.none") : "–"}</Text>
               ) : (
                 <ul className={styles.certList}>
                   {certificates.map((c) => (
                     <li key={c.id}>
-                      <Link onClick={() => setPreviewed(c)} accessibleName={`Open ${c.fileName}`}>
+                      <Link onClick={() => setPreviewed(c)} accessibleName={t("certificates.open", { name: c.fileName })}>
                         {c.fileName}
                       </Link>
                       <Button
                         design="Transparent"
                         icon="download"
-                        tooltip={`Download ${c.fileName}`}
-                        accessibleName={`Download ${c.fileName}`}
+                        tooltip={t("certificates.download", { name: c.fileName })}
+                        accessibleName={t("certificates.download", { name: c.fileName })}
                         onClick={() => saveCertificate(c).catch((e: unknown) => setDownloadError(`${c.fileName}: ${toUserMessage(e)}`))}
                       />
                     </li>
@@ -94,9 +95,13 @@ export function PersonSkills({ personName, rows, onOpenSkill }: PersonSkillsProp
                   design="Transparent"
                   icon={assignment ? "edit" : "add"}
                   onClick={() => onOpenSkill(definition)}
-                  accessibleName={assignment ? `Edit ${definition.name} of ${personName}` : `Assign ${definition.name} to ${personName}`}
+                  accessibleName={
+                    assignment
+                      ? t("personView.editLabel", { skill: definition.name, person: personName })
+                      : t("personView.assignLabel", { skill: definition.name, person: personName })
+                  }
                 >
-                  {assignment ? "Edit" : "Assign"}
+                  {assignment ? t("common.edit") : t("common.assign")}
                 </Button>
               </TableCell>
             ) : null}

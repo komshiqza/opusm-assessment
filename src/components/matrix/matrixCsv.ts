@@ -2,6 +2,7 @@ import { getAssignmentStatus } from "@/lib/domain/status";
 import { formatDate } from "@/lib/format";
 import type { Assignment } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "./statusDisplay";
+import { t } from "@/lib/i18n/t";
 
 /** Excel in Switzerland expects ";" between cells (the decimal comma is taken). */
 const SEPARATOR = ";";
@@ -26,7 +27,8 @@ export function matrixCsv(
   certificateCount: (assignmentId: string) => number,
   today: string,
 ): string {
-  const header = ["Person", "Job title", ...skills.flatMap((s) => ["Status", "Valid from", "Valid to", "Level", "Certificates"].map((c) => `${s.name} – ${c}`))];
+  const columns = [t("common.status"), t("common.validFrom"), t("common.validTo"), t("common.level"), t("common.certificates")];
+  const header = [t("common.person"), t("csv.jobTitle"), ...skills.flatMap((s) => columns.map((column) => t("csv.column", { skill: s.name, column })))];
   const rows = persons.map((p) => [
     p.name,
     p.jobTitle ?? "",

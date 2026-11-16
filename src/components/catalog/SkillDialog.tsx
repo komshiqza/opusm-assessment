@@ -7,6 +7,7 @@ import { createSkillDefinition, updateSkillDefinition } from "@/lib/skills/repos
 import { toUserMessage } from "@/lib/errors";
 import { createOperationLock } from "@/lib/operationLock";
 import type { SkillDefinition } from "@/lib/skills/types";
+import { t } from "@/lib/i18n/t";
 
 interface SkillDialogProps {
   /** null = create a new skill */
@@ -53,7 +54,7 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
   return (
     <Dialog
       open
-      headerText={skill ? `Edit skill “${skill.name}”` : "Create skill"}
+      headerText={skill ? t("skillDialog.edit", { name: skill.name }) : t("skillDialog.create")}
       onBeforeClose={(e) => (busy || lock.running) && e.preventDefault()}
       onClose={onClose}
       style={{ width: "min(30rem, 100vw)" }}
@@ -63,10 +64,10 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
           endContent={
             <>
               <Button design="Emphasized" onClick={save} disabled={busy}>
-                {skill ? "Save" : "Create"}
+                {skill ? t("common.save") : t("skillDialog.createButton")}
               </Button>
               <Button design="Transparent" onClick={onClose} disabled={busy}>
-                Cancel
+                {t("common.cancel")}
               </Button>
             </>
           }
@@ -83,13 +84,13 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
         >
           <div style={{ display: "grid", gap: "0.25rem" }}>
             <Label for="skill-name" required showColon>
-              Name
+              {t("skillDialog.name")}
             </Label>
             <Input
               id="skill-name"
               value={name}
               maxlength={MAX_SKILL_NAME_LENGTH}
-              placeholder="e.g. Welding (steel)"
+              placeholder={t("skillDialog.namePlaceholder")}
               onInput={(e) => setName(e.target.value ?? "")}
               onChange={() => setTouched(true)}
               valueState={touched && nameError ? "Negative" : "None"}
@@ -99,7 +100,7 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
           </div>
           <div style={{ display: "grid", gap: "0.25rem" }}>
             <Label for="skill-description" showColon>
-              Description (optional)
+              {t("skillDialog.description")}
             </Label>
             <TextArea id="skill-description" value={description} rows={3} maxlength={500} onInput={(e) => setDescription(e.target.value ?? "")} />
           </div>

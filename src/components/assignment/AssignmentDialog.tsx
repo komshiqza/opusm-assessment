@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Bar, BusyIndicator, Button, DatePicker, Dialog, FileUploader, Label, MessageStrip, SegmentedButton, SegmentedButtonItem, Text } from "@ui5/webcomponents-react";
 import { getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
-import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
+import { effectiveStartDate, validityProblem } from "@/lib/domain/validation";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
 import {
   checkAssignmentCreated,
@@ -28,6 +28,7 @@ import { closeAfterRefresh, initialLevelId, levelChoices, levelToSend, primaryAc
 import { EMPTY_RESULTS, applyOutcome, createResultLine, type UploadResults } from "./uploadResults";
 import { ResultStrip, UploadResultNotes } from "./UploadResultNotes";
 import styles from "./AssignmentDialog.module.css";
+import { t, tn } from "@/lib/i18n/t";
 
 interface AssignmentDialogProps {
   person: Person;
@@ -102,9 +103,10 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
   // The picker's value is always in valueFormat (YYYY-MM-DD) or, if the user typed nonsense, that text.
   // Our own validation decides; the picker's `valid` flag is unreliable with a custom displayFormat.
-  const dateError = validateValidity(effectiveStartDate(from || null, today), to || null);
-  const fromInvalid = Boolean(dateError?.startsWith("“Valid from”"));
-  const toInvalid = Boolean(dateError) && !fromInvalid;
+  const dateProblem = validityProblem(effectiveStartDate(from || null, today), to || null);
+  const dateError = dateProblem?.message ?? null;
+  const fromInvalid = dateProblem?.field === "from";
+  const toInvalid = dateProblem?.field === "to";
 
   /** Runs one save or retry at a time and keeps the dialog locked meanwhile. */
   const runLocked = async (work: () => Promise<void>) => {
@@ -125,7 +127,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     }
   };
 
-  const showProgress = (file: File, index: number, total: number) => setProgress(`Uploading ${file.name} (${index + 1} of ${total})…`);
+  const showProgress = (file: File, index: number, total: number) => setProgress(t("assign.uploading", { name: file.name, i: index + 1, total }));
 
   const save = () =>
     runLocked(async () => {
@@ -143,11 +145,11 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
         const allUploaded = !outcome || (outcome.failed.length === 0 && outcome.unconfirmed.length === 0);
         setProgress("Refreshing…");
         if (!(await state.reload())) {
-          setNotRefreshed({ done: "The assignment is saved", close: allUploaded });
+          setNotRefreshed({ done: t("assign.doneSaved"), close: allUploaded });
           return;
         }
         if (!allUploaded) return;
-        toast(outcome?.uploaded.length ? `Assignment saved with ${outcome.uploaded.length} certificate(s)` : "Assignment saved");
+        toast(outcome?.uploaded.length ? t("assign.savedWith", { n: outcome.uploaded.length }) : t("assign.saved"));
         onClose();
         return;
       }
@@ -173,9 +175,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       const refreshed = await state.reload();
       const count = result.uploaded.length;
       const allUploaded = result.failed.length === 0 && result.unconfirmed.length === 0;
-      if (!refreshed) setNotRefreshed({ done: "The skill is assigned", close: allUploaded });
+      if (!refreshed) setNotRefreshed({ done: t("assign.doneAssigned"), close: allUploaded });
       if (allUploaded && refreshed) {
-        toast(`${definition.name} assigned to ${person.name}${count ? ` with ${count} certificate${count > 1 ? "s" : ""}` : ""}`);
+        toast(count ? tn("assign.assignedWith", count, { skill: definition.name, person: person.name }) : t("assign.assignedTo", { skill: definition.name, person: person.name }));
         onClose();
       }
       // Otherwise the assignment exists and the dialog stays open with the files that still need attention.
@@ -186,7 +188,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
    * is settled for now (it is there, or the check could not tell), false when it is not in FSM.
    */
   const checkCreate = async (): Promise<boolean> => {
-    setProgress("FSM did not answer in time. Checking in FSM whether the skill was assigned…");
+    setProgress(t("assign.checkingCreate"));
     const check = await checkAssignmentCreated(definition.id, person.id);
     if (check.result === "notDone") {
       setCreateCheck({ result: "notDone" });
@@ -199,7 +201,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     setCreatedId(check.value.id);
     setCreateCheck({ result: "done" });
     setProgress("Refreshing…");
-    if (!(await state.reload())) setNotRefreshed({ done: "The skill is assigned", close: pendingFiles.length === 0 });
+    if (!(await state.reload())) setNotRefreshed({ done: t("assign.doneAssigned"), close: pendingFiles.length === 0 });
     return true;
   };
 
@@ -213,30 +215,30 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       setUploadResults((current) => applyOutcome(current, outcome, [file]));
       setProgress("Refreshing…");
       if (!(await state.reload())) {
-        setNotRefreshed({ done: outcome.uploaded.length ? "The certificates are uploaded" : "The upload is finished", close: false });
+        setNotRefreshed({ done: outcome.uploaded.length ? t("assign.doneUploaded") : t("assign.doneUploadFinished"), close: false });
         return;
       }
-      if (outcome.uploaded.length) toast(`${file.name} uploaded`); // only this file: others may still need attention
+      if (outcome.uploaded.length) toast(t("assign.uploadedOne", { name: file.name })); // only this file: others may still need attention
     });
 
   /** Check again for uploads that could not be confirmed. Reads only. */
   const checkUploadsAgain = (file: File) =>
     runLocked(async () => {
       if (!assignmentId) return;
-      setProgress("Checking in FSM…");
+      setProgress(t("common.checkingFsm"));
       const outcome = await recheckUploads(assignmentId, uploadResults.unconfirmed.filter((u) => u.file === file));
       setUploadResults((current) => applyOutcome(current, outcome, [file]));
-      if (outcome.uploaded.length && !(await state.reload())) setNotRefreshed({ done: "The certificates are uploaded", close: false });
+      if (outcome.uploaded.length && !(await state.reload())) setNotRefreshed({ done: t("assign.doneUploaded"), close: false });
     });
 
   /** Retries the reload after a write; closes the dialog when the write was the last step. */
   const refreshList = () =>
     runLocked(async () => {
-      if (!(await state.reload())) throw new Error("The list could still not be refreshed from FSM. Check the connection and try again.");
+      if (!(await state.reload())) throw new Error(t("assign.stillNotRefreshed"));
       const closeNow = closeAfterRefresh(notRefreshed, pendingFiles.length);
       setNotRefreshed(null);
       if (closeNow) {
-        toast("List refreshed");
+        toast(t("assign.listRefreshed"));
         onClose();
       }
     });
@@ -245,7 +247,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     if (operationRef.current) return;
     operationRef.current = true;
     setInspecting(true);
-    setProgress("Checking files…");
+    setProgress(t("assign.checkingFiles"));
     try {
       const { valid, problems } = await splitCertificateFiles(files);
       setPickProblems(problems);
@@ -267,7 +269,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     <>
       <Dialog
         open
-        headerText={assignment ? `${definition.name}: ${person.name}` : `Assign ${definition.name}`}
+        headerText={assignment ? t("assign.headerEdit", { skill: definition.name, person: person.name }) : t("assign.headerNew", { skill: definition.name })}
         onBeforeClose={(e) => (locked || operationRef.current) && e.preventDefault()}
         onClose={onClose}
         className={styles.dialog}
@@ -280,7 +282,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
               ) : (
                 assignment && (
                   <Button design="Transparent" icon="delete" onClick={() => !operationRef.current && setConfirmRemove(true)} disabled={locked}>
-                    Remove assignment
+                    {t("assign.remove")}
                   </Button>
                 )
               )
@@ -291,15 +293,15 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                   <Button design="Emphasized" onClick={save} disabled={locked || Boolean(dateError)}>
                     {action === "save"
                       ? pendingFiles.length
-                        ? `Save and upload ${pendingFiles.length} file${pendingFiles.length > 1 ? "s" : ""}`
-                        : "Save"
+                        ? tn("assign.saveAndUpload", pendingFiles.length)
+                        : t("common.save")
                       : pendingFiles.length
-                        ? `Assign and upload ${pendingFiles.length} file${pendingFiles.length > 1 ? "s" : ""}`
-                        : "Assign"}
+                        ? tn("assign.assignAndUpload", pendingFiles.length)
+                        : t("common.assign")}
                   </Button>
                 )}
                 <Button design="Transparent" onClick={() => !operationRef.current && onClose()} disabled={locked}>
-                  {failed.length || createdId || removed || notRefreshed ? "Close" : "Cancel"}
+                  {failed.length || createdId || removed || notRefreshed ? t("common.close") : t("common.cancel")}
                 </Button>
               </>
             }
@@ -325,7 +327,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                 {levels.length > 0 ? (
                   <div className={styles.formItem}>
                     <Label id="assignment-level-label" showColon>
-                      Proficiency level
+                      {t("assign.level")}
                     </Label>
                     <SegmentedButton
                       accessibleNameRef="assignment-level-label"
@@ -350,7 +352,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
                 <div className={styles.formItem}>
                   <Label for="assignment-from" showColon>
-                    Valid from
+                    {t("common.validFrom")}
                   </Label>
                   <DatePicker
                     id="assignment-from"
@@ -358,7 +360,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                     value={from}
                     valueFormat="yyyy-MM-dd"
                     displayFormat="dd.MM.yyyy"
-                    placeholder={`Today (${formatDate(today)}) if empty`}
+                    placeholder={t("assign.fromPlaceholder", { date: formatDate(today) })}
                     valueState={fromInvalid ? "Negative" : "None"}
                     onChange={(e) => setFrom(e.target.value ?? "")}
                   />
@@ -366,7 +368,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
                 <div className={styles.formItem}>
                   <Label for="assignment-to" showColon>
-                    Valid to
+                    {t("common.validTo")}
                   </Label>
                   <DatePicker
                     id="assignment-to"
@@ -374,7 +376,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                     value={to}
                     valueFormat="yyyy-MM-dd"
                     displayFormat="dd.MM.yyyy"
-                    placeholder="No end date if empty"
+                    placeholder={t("assign.toPlaceholder")}
                     valueState={toInvalid ? "Negative" : "None"}
                     onChange={(e) => setTo(e.target.value ?? "")}
                   />
@@ -385,14 +387,14 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             {dateError && !removed && (
               <MessageStrip design="Negative" hideCloseButton>
                 {dateError}
-                {!from && dateError.includes("before") ? " An empty “Valid from” means today, so enter the real start date." : ""}
+                {!from && dateProblem?.kind === "beforeFrom" ? ` ${t("validation.emptyFromHint")}` : ""}
               </MessageStrip>
             )}
             {notRefreshed && (
               <MessageStrip design="Critical" hideCloseButton>
-                {notRefreshed.done}, but the list could not be refreshed from FSM, so it may not show this change yet.{" "}
+                {t("assign.notRefreshed", { done: notRefreshed.done })}{" "}
                 <Button icon="refresh" onClick={refreshList} disabled={locked}>
-                  Refresh list
+                  {t("assign.refreshList")}
                 </Button>
               </MessageStrip>
             )}
@@ -407,9 +409,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                 line={createResultLine(createCheck)}
                 action={
                   createCheck.result === "notDone"
-                    ? { text: "Try again", onClick: save }
+                    ? { text: t("result.tryAgain"), onClick: save }
                     : createCheck.result === "unconfirmed"
-                      ? { text: "Check again", onClick: checkCreateAgain }
+                      ? { text: t("result.checkAgain"), onClick: checkCreateAgain }
                       : undefined
                 }
                 locked={locked}
@@ -419,7 +421,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
             {!removed && assignment && pendingFiles.length > 0 && (
               <MessageStrip design="Information" hideCloseButton>
-                Picked but not uploaded yet: {pendingFiles.map((f) => f.name).join(", ")}. They are uploaded when you save.{" "}
+                {t("assign.pending", { names: pendingFiles.map((f) => f.name).join(", ") })}{" "}
                 <Button design="Transparent" onClick={() => setPendingFiles([])} disabled={locked}>
                   Don’t upload them
                 </Button>
@@ -437,20 +439,20 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
               />
             ) : (
               <section className={styles.certificates} aria-labelledby="new-certificates-title">
-                <Label id="new-certificates-title">Certificates (optional)</Label>
+                <Label id="new-certificates-title">{t("assign.certificatesOptional")}</Label>
                 {pendingFiles.length > 0 && (
                   <ul className={styles.certList}>
                     {pendingFiles.map((f, i) => (
                       <li key={i} className={styles.certItem}>
                         <span className={styles.certText}>
                           <span>{f.name}</span>
-                          <span className={styles.muted}>{formatFileSize(f.size)} · uploaded when you assign</span>
+                          <span className={styles.muted}>{t("assign.uploadedWhenAssigned", { size: formatFileSize(f.size) })}</span>
                         </span>
                         <Button
                           design="Transparent"
                           icon="decline"
-                          tooltip={`Remove ${f.name}`}
-                          accessibleName={`Remove ${f.name}`}
+                          tooltip={t("assign.removeFile", { name: f.name })}
+                          accessibleName={t("assign.removeFile", { name: f.name })}
                           disabled={formLocked}
                           onClick={() => setPendingFiles((current) => current.filter((c) => c !== f))}
                         />
@@ -468,10 +470,10 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                     onChange={(e) => void pickFiles(Array.from(e.detail.files ?? []))}
                   >
                     <Button icon="add" disabled={formLocked}>
-                      Choose certificates
+                      {t("assign.chooseCertificates")}
                     </Button>
                   </FileUploader>
-                  <Text className={styles.muted}>PDF, JPG or PNG, max. {MAX_CERTIFICATE_LABEL} each</Text>
+                  <Text className={styles.muted}>{t("assign.fileRules", { max: MAX_CERTIFICATE_LABEL })}</Text>
                 </div>
                 {pickProblems.length > 0 && (
                   <MessageStrip design="Negative" onClose={() => setPickProblems([])}>
@@ -487,12 +489,12 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       {assignment && (
         <ConfirmDialog
           open={confirmRemove}
-          title="Remove assignment?"
-          confirmText="Remove"
+          title={t("assign.removeTitle")}
+          confirmText={t("assign.removeButton")}
           onClose={() => setConfirmRemove(false)}
           onConfirm={async () => {
             // Same lock as Save and the certificate actions: nothing else may run during the removal.
-            if (operationRef.current) throw new Error("Another action in this dialog is still running. Try again when it has finished.");
+            if (operationRef.current) throw new Error(t("assign.busy"));
             operationRef.current = true;
             setBusy(true);
             try {
@@ -507,10 +509,10 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
               }
               setRemoved(true);
               if (!(await state.reload())) {
-                setNotRefreshed({ done: `${definition.name} is removed from ${person.name}`, close: true });
+                setNotRefreshed({ done: t("assign.doneRemoved", { skill: definition.name, person: person.name }), close: true });
                 return;
               }
-              toast(`${definition.name} removed from ${person.name}`);
+              toast(t("assign.removed", { skill: definition.name, person: person.name }));
               onClose();
             } finally {
               operationRef.current = false;
@@ -518,9 +520,11 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             }
           }}
         >
-          {`${person.name} will no longer have “${definition.name}”.${
-            certificates.length ? ` The ${certificates.length} attached certificate(s) will be deleted as well.` : ""
-          } This cannot be undone.`}
+          {t("assign.removeText", {
+            person: person.name,
+            skill: definition.name,
+            certificates: certificates.length ? t("assign.removeCertificates", { n: certificates.length }) : "",
+          })}
         </ConfirmDialog>
       )}
     </>

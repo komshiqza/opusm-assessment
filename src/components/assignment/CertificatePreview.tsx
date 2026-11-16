@@ -7,6 +7,7 @@ import { toUserMessage } from "@/lib/errors";
 import type { Certificate } from "@/lib/skills/types";
 import { saveCertificate } from "./saveCertificate";
 import styles from "./AssignmentDialog.module.css";
+import { t } from "@/lib/i18n/t";
 
 type Preview = { url: string } | { error: string } | null;
 
@@ -44,10 +45,10 @@ export function CertificatePreview({ certificate, onClose }: { certificate: Cert
           endContent={
             <>
               <Button icon="download" onClick={() => saveCertificate(certificate).catch((e: unknown) => setPreview({ error: toUserMessage(e) }))}>
-                Download
+                {t("common.download")}
               </Button>
               <Button design="Emphasized" onClick={onClose}>
-                Close
+                {t("common.close")}
               </Button>
             </>
           }

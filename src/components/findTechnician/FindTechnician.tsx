@@ -31,6 +31,7 @@ import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "@/components/matrix/statusDisplay";
 import { NoJobTitleTag } from "@/components/common/NoJobTitleTag";
+import { t, tn } from "@/lib/i18n/t";
 import styles from "./FindTechnician.module.css";
 
 const ANY_LEVEL = "any";
@@ -59,7 +60,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const levels = state.data?.scale?.levels ?? [];
   const minLevel = levels.find((l) => l.id === minLevelId) ?? null;
   const required = definitions.filter((d) => skillIds.includes(d.id));
-  const dateError = jobDate ? validateValidity(jobDate, null) : "Please enter the job date.";
+  const dateError = jobDate ? validateValidity(jobDate, null) : t("find.enterJobDate");
 
   const persons = useMemo(() => selectPersonRows(state.data?.persons ?? [], state.assignedPersonIds, false), [state.data, state.assignedPersonIds]);
   /** "ERP user" etc. only where two records of one person are listed (one row per person otherwise). */
@@ -76,20 +77,20 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
     const end = normalizeEndDate(held?.endDate);
     const startsLater = Boolean(held?.startDate && held.startDate > jobDate);
     const [display, label] = !held
-      ? [STATUS_DISPLAY.none, "Not assigned"]
+      ? [STATUS_DISPLAY.none, t("status.none")]
       : check.ok
-        ? [STATUS_DISPLAY.valid, "Valid on job day"]
+        ? [STATUS_DISPLAY.valid, t("find.validOnJobDay")]
         : end && end < jobDate
-          ? [end < today ? STATUS_DISPLAY.expired : STATUS_DISPLAY.expiring, `Ends ${formatDate(end)}`]
+          ? [end < today ? STATUS_DISPLAY.expired : STATUS_DISPLAY.expiring, t("find.endsOn", { date: formatDate(end) })]
           : startsLater
-            ? [STATUS_DISPLAY.upcoming, `Starts ${formatDate(held.startDate)}`]
-            : [STATUS_DISPLAY.expiring, "Level too low"];
+            ? [STATUS_DISPLAY.upcoming, t("find.startsOn", { date: formatDate(held.startDate) })]
+            : [STATUS_DISPLAY.expiring, t("find.levelTooLow")];
     return (
       <button
         type="button"
         className={styles.cell}
         onClick={() => onOpen(person, skill)}
-        title={check.reason ?? `${skill.name}: valid on ${formatDate(jobDate)}`}
+        title={check.reason ?? t("find.validOn", { skill: skill.name, date: formatDate(jobDate) })}
       >
         <span className={styles.status} style={{ color: display.color }}>
           <Icon name={display.icon} className={styles.icon} style={{ color: "inherit" }} />
@@ -97,7 +98,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
         </span>
         {held && (
           <span className={styles.meta}>
-            {held.proficiencyName ?? "No level"} · {end ? `to ${formatDate(end)}` : "no end date"}
+            {held.proficiencyName ?? t("common.noLevel")} · {end ? t("find.toDate", { date: formatDate(end) }) : t("find.noEndDate")}
             {certs > 0 && (
               <>
                 {" "}
@@ -114,7 +115,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const personCell = (p: Person, technician: boolean) => (
     <TableCell>
       <span className={styles.person}>
-        <Link onClick={() => onOpenPerson(p)} accessibleName={`All skills of ${p.name}`} className={styles.personLink}>
+        <Link onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })} className={styles.personLink}>
           {p.name}
         </Link>
         <span className={styles.muted}>{[p.jobTitle, needsType.has(p.id) ? formatPersonType(p.type) : ""].filter(Boolean).join(" · ")}</span>
@@ -127,15 +128,16 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const readyHeadline = (ready: { technician: boolean }[]) => {
     const technicians = ready.filter((r) => r.technician).length;
     const others = ready.length - technicians;
-    const extra = others ? ` (+${others} ${others === 1 ? "person" : "people"} without a job title)` : "";
-    if (!ready.length) return `Nobody can do this job on ${formatDate(jobDate)}`;
-    if (!technicians) return `No technician can do this job on ${formatDate(jobDate)}${extra}`;
-    return `${technicians} technician${technicians === 1 ? "" : "s"} can do this job on ${formatDate(jobDate)}${extra}`;
+    const extra = others ? tn("find.withoutJobTitle", others) : "";
+    const date = formatDate(jobDate);
+    if (!ready.length) return t("find.nobody", { date });
+    if (!technicians) return t("find.noTechnician", { date, extra });
+    return tn("find.ready", technicians, { date, extra });
   };
 
   const header = (last: string) => (
     <TableHeaderRow sticky>
-      <TableHeaderCell minWidth="12rem">Person</TableHeaderCell>
+      <TableHeaderCell minWidth="12rem">{t("common.person")}</TableHeaderCell>
       {required.map((s) => (
         <TableHeaderCell key={s.id} minWidth="11rem">
           {s.name}
@@ -150,17 +152,17 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
       <section className={styles.panel} aria-labelledby="find-title">
         <div className={styles.panelHeader}>
           <Title level="H4" id="find-title">
-            Who can do the job?
+            {t("find.title")}
           </Title>
         </div>
         <div className={styles.form}>
           <div className={styles.field}>
             <Label for="find-skills" required>
-              Required skills
+              {t("find.requiredSkills")}
             </Label>
             <MultiComboBox
               id="find-skills"
-              placeholder="Choose skills"
+              placeholder={t("find.chooseSkills")}
               onSelectionChange={(e) => setSkillIds(e.detail.items.map((i) => String(i.dataset.id)))}
             >
               {definitions.map((d) => (
@@ -169,9 +171,9 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
             </MultiComboBox>
           </div>
           <div className={styles.fieldSmall}>
-            <Label for="find-level">Minimum level</Label>
+            <Label for="find-level">{t("find.minLevel")}</Label>
             <Select id="find-level" value={minLevelId} onChange={(e) => setMinLevelId(e.detail.selectedOption.value ?? ANY_LEVEL)}>
-              <Option value={ANY_LEVEL}>Any level</Option>
+              <Option value={ANY_LEVEL}>{t("find.anyLevel")}</Option>
               {levels.map((l) => (
                 <Option key={l.id} value={l.id}>
                   {minimumLevelLabel(l, levels)}
@@ -181,7 +183,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
           </div>
           <div className={styles.fieldSmall}>
             <Label for="find-date" required>
-              Job date
+              {t("find.jobDate")}
             </Label>
             <DatePicker
               id="find-date"
@@ -199,8 +201,8 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
       {required.length === 0 || !result ? (
         <IllustratedMessage
           name="NoData"
-          titleText={dateError ? "Check the job date" : "Choose the skills the job needs"}
-          subtitleText={dateError ?? "The app then lists who can do the job on that day, and who is missing just one skill."}
+          titleText={dateError ? t("find.checkDate") : t("find.chooseTitle")}
+          subtitleText={dateError ?? t("find.chooseHint")}
         />
       ) : (
         <>
@@ -211,7 +213,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
               </Title>
             </div>
             {result.ready.length > 0 && (
-              <Table overflowMode="Popin" headerRow={header("Result")}>
+              <Table overflowMode="Popin" headerRow={header(t("find.result"))}>
                 {result.ready.map(({ person, technician }) => (
                   <TableRow key={person.id} rowKey={person.id}>
                     {personCell(person, technician)}
@@ -219,7 +221,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
                       <TableCell key={s.id}>{skillCell(person, s)}</TableCell>
                     ))}
                     <TableCell>
-                      <Text style={{ color: "var(--sapPositiveTextColor)", fontWeight: "bold" }}>Can do the job</Text>
+                      <Text style={{ color: "var(--sapPositiveTextColor)", fontWeight: "bold" }}>{t("find.canDo")}</Text>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -230,11 +232,11 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
               <Title level="H4">
-                Almost ({result.almost.length}): one skill to renew, raise to the level, or that starts too late for {formatDate(jobDate)}
+                {t("find.almostTitle", { n: result.almost.length, date: formatDate(jobDate) })}
               </Title>
             </div>
             {result.almost.length > 0 ? (
-              <Table overflowMode="Popin" headerRow={header("Why not")}>
+              <Table overflowMode="Popin" headerRow={header(t("find.whyNot"))}>
                 {result.almost.map(({ person, reason, technician }) => (
                   <TableRow key={person.id} rowKey={person.id}>
                     {personCell(person, technician)}
@@ -248,7 +250,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
                 ))}
               </Table>
             ) : (
-              <Text className={styles.padded}>Nobody is just one renewal, level or start date away.</Text>
+              <Text className={styles.padded}>{t("find.almostNone")}</Text>
             )}
             {result.missingOne.length > 0 && (
               // Collapsed: with one required skill this is nearly everyone, and not having a skill cannot be fixed before the job.
@@ -257,15 +259,15 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
                 className={styles.missingPanel}
                 headerText={
                   required.length === 1
-                    ? `${result.missingOne.length} ${result.missingOne.length === 1 ? "person doesn't" : "people don't"} have this skill`
-                    : `${result.missingOne.length} ${result.missingOne.length === 1 ? "person is" : "people are"} missing one of these skills`
+                    ? tn("find.missingThis", result.missingOne.length)
+                    : tn("find.missingOne", result.missingOne.length)
                 }
               >
                 <ul className={styles.missingList}>
                   {result.missingOne.map(({ person, skillName, technician }) => (
                     <li key={person.id}>
                       <b>{person.name}</b>
-                      {required.length > 1 && <span className={styles.muted}> · Missing: {skillName}</span>}
+                      {required.length > 1 && <span className={styles.muted}> · {t("find.missingSkill", { skill: skillName })}</span>}
                       {!technician && (
                         <>
                           {" "}
@@ -279,7 +281,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
             )}
             {result.others > 0 && (
               <Text className={`${styles.muted} ${styles.padded}`}>
-                {result.others} other technician{result.others === 1 ? "" : "s"} miss two or more of these skills.
+                {tn("find.others", result.others)}
               </Text>
             )}
           </section>

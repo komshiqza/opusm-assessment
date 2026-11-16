@@ -18,6 +18,7 @@ import { effectiveStartDate, validateSkillName, validateValidity } from "@/lib/d
 import { inspectCertificateFile } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import type { Assignment, AssignmentInput, Certificate, Person, ProficiencyScale, SkillDefinition } from "./types";
+import { t, tn } from "@/lib/i18n/t";
 
 /** One scale for all our skills. */
 export const SCALE_NAME = toScopedName("Proficiency");
@@ -210,9 +211,7 @@ export interface DeleteTargets extends DeleteImpact {
 /** FSM has more assignments or certificates for the skill than the user confirmed. Nothing was deleted. */
 export class DeleteImpactChangedError extends Error {
   constructor(public readonly impact: DeleteTargets) {
-    super(
-      `Since you opened this dialog, the skill got more assignments or certificates in FSM (now ${impact.assignments} assignment(s) and ${impact.certificates} certificate(s)). Nothing was deleted. Check the new numbers and confirm again.`,
-    );
+    super(t("deleteDialog.changed", { assignments: impact.assignments, certificates: impact.certificates }));
     this.name = "DeleteImpactChangedError";
   }
 }
@@ -276,11 +275,11 @@ async function deleteLateCertificates(skillIds: string[]): Promise<number> {
 function withProgress(error: unknown, done: DeleteImpact): unknown {
   if (!done.assignments && !done.certificates) return error;
   const parts = [
-    done.certificates ? `${done.certificates} certificate${done.certificates > 1 ? "s" : ""}` : "",
-    done.assignments ? `${done.assignments} assignment${done.assignments > 1 ? "s" : ""}` : "",
+    done.certificates ? tn("delete.certificates", done.certificates) : "",
+    done.assignments ? tn("delete.assignments", done.assignments) : "",
   ].filter(Boolean);
   const message = error instanceof Error ? error.message : String(error);
-  return new Error(`${message} Already deleted before the error: ${parts.join(" and ")}. Reload and try again to finish.`);
+  return new Error(t("delete.partial", { message, parts: parts.join(t("delete.partsAnd")) }));
 }
 
 // --- Writes: assignments (Skills) -------------------------------------------------------
@@ -299,7 +298,7 @@ function toWritableDates(input: AssignmentInput): { startDate: string; endDate: 
 /** The person already has this skill in FSM; nothing was written. */
 export class AssignmentExistsError extends Error {
   constructor() {
-    super("This person already has this skill. Reload the page to see it.");
+    super(t("assign.exists"));
     this.name = "AssignmentExistsError";
   }
 }
@@ -441,10 +440,10 @@ export async function checkCertificateUploaded(assignmentId: string, uploadId: s
       ["Attachment"],
     );
     if (rows.length === 0) return { result: "notDone" };
-    if (rows.length > 1) return { result: "unconfirmed", error: "FSM shows more than one file from this upload." };
+    if (rows.length > 1) return { result: "unconfirmed", error: t("upload.moreThanOne") };
     assertFsmId(rows[0].a.id);
     if (!(await sameBytes(rows[0].a.id, file))) {
-      return { result: "unconfirmed", error: "FSM has a new file from this upload, but its content is not the same as the picked file." };
+      return { result: "unconfirmed", error: t("upload.contentDiffers") };
     }
     return { result: "done", value: toCertificate(rows[0].a) };
   } catch (e) {
@@ -452,7 +451,7 @@ export async function checkCertificateUploaded(assignmentId: string, uploadId: s
   }
 }
 
-const NOT_UPLOADED = "FSM did not answer in time; the file is not in FSM.";
+const NOT_UPLOADED = () => t("upload.notInFsm");
 
 /** Sorts one check result into the outcome lists. */
 function recordCheck(outcome: UploadOutcome, file: File, uploadId: string, check: WriteCheck<Certificate>): void {
@@ -460,7 +459,7 @@ function recordCheck(outcome: UploadOutcome, file: File, uploadId: string, check
     outcome.uploaded.push(check.value);
     outcome.confirmedLate.push(file);
   } else if (check.result === "notDone") {
-    outcome.failed.push({ file, error: NOT_UPLOADED, uploadId });
+    outcome.failed.push({ file, error: NOT_UPLOADED(), uploadId });
   } else {
     outcome.unconfirmed.push({ file, error: check.error, uploadId });
   }
@@ -522,7 +521,7 @@ export async function checkAssignmentCreated(tagId: string, personId: string): P
     ).filter((s) => !s.deleted && s.tagId === tagId);
     if (found.length === 0) return { result: "notDone" };
     if (found.length === 1 && isOwnName(found[0].tagName)) return { result: "done", value: toAssignment(found[0]) };
-    return { result: "unconfirmed", error: "FSM shows an unexpected answer for this person and skill. Reload the page to see what is stored." };
+    return { result: "unconfirmed", error: t("assign.unexpected") };
   } catch (e) {
     return { result: "unconfirmed", error: toUserMessage(e) };
   }
@@ -574,7 +573,7 @@ export interface BulkResult {
 /** The answer of a check after a timed-out create, as a bulk result. */
 function fromCheck(personId: string, check: WriteCheck<Assignment>): BulkResult {
   if (check.result === "done") return { personId, result: "assigned" };
-  if (check.result === "notDone") return { personId, result: "failed", error: "FSM did not answer in time; the skill is not assigned.", checkFirst: true };
+  if (check.result === "notDone") return { personId, result: "failed", error: t("assign.notInFsm"), checkFirst: true };
   return { personId, result: "unconfirmed", error: check.error };
 }
 
@@ -605,7 +604,7 @@ export async function bulkAssign(
   input: AssignmentInput,
   onProgress?: (index: number, total: number) => void,
 ): Promise<BulkResult[]> {
-  if (personIds.length > BULK_LIMIT) throw new Error(`At most ${BULK_LIMIT} persons at once.`);
+  if (personIds.length > BULK_LIMIT) throw new Error(t("bulk.limit", { max: BULK_LIMIT }));
   toWritableDates(input); // invalid dates: stop before the first write
   const results: BulkResult[] = [];
   for (const [index, personId] of personIds.entries()) {

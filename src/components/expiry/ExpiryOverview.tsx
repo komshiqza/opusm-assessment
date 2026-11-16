@@ -20,6 +20,7 @@ import { addDays, daysBetween, getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { formatDate, formatPersonType } from "@/lib/format";
 import { recordsNeedingType } from "@/lib/domain/persons";
+import { t, tn } from "@/lib/i18n/t";
 import type { SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
@@ -61,34 +62,34 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "0.75rem" }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "0.75rem 1.5rem" }}>
         <div style={{ display: "grid", gap: "0.25rem" }}>
-          <Label for="expiry-window">Ends within</Label>
+          <Label for="expiry-window">{t("expiry.endsWithin")}</Label>
           <Select id="expiry-window" value={String(days)} onChange={(e) => setDays(Number(e.detail.selectedOption.value))}>
             {WINDOWS.map((d) => (
               <Option key={d} value={String(d)}>
-                the next {d} days
+                {t("expiry.days", { n: d })}
               </Option>
             ))}
           </Select>
         </div>
-        <CheckBox text="Include already expired" checked={includeExpired} onChange={(e) => setIncludeExpired(e.target.checked)} />
+        <CheckBox text={t("expiry.includeExpired")} checked={includeExpired} onChange={(e) => setIncludeExpired(e.target.checked)} />
         <Text style={{ color: "var(--sapContent_LabelColor)" }}>
-          {rows.length} assignment{rows.length === 1 ? "" : "s"} · until {formatDate(until)}
+          {tn("expiry.summary", rows.length, { date: formatDate(until) })}
         </Text>
       </div>
 
       {rows.length === 0 ? (
-        <IllustratedMessage name="NoData" titleText="Nothing ends in this period" subtitleText="Choose a longer period to look further ahead." />
+        <IllustratedMessage name="NoData" titleText={t("expiry.nothing")} subtitleText={t("expiry.nothingHint")} />
       ) : (
         <Table
           overflowMode="Popin"
           headerRow={
             <TableHeaderRow sticky>
-              <TableHeaderCell minWidth="9rem">Ends on</TableHeaderCell>
-              <TableHeaderCell minWidth="10rem">Status</TableHeaderCell>
-              <TableHeaderCell minWidth="12rem">Person</TableHeaderCell>
-              <TableHeaderCell minWidth="12rem">Skill</TableHeaderCell>
-              <TableHeaderCell minWidth="7rem">Level</TableHeaderCell>
-              <TableHeaderCell minWidth="7rem">Certificates</TableHeaderCell>
+              <TableHeaderCell minWidth="9rem">{t("expiry.endsOn")}</TableHeaderCell>
+              <TableHeaderCell minWidth="10rem">{t("common.status")}</TableHeaderCell>
+              <TableHeaderCell minWidth="12rem">{t("common.person")}</TableHeaderCell>
+              <TableHeaderCell minWidth="12rem">{t("common.skill")}</TableHeaderCell>
+              <TableHeaderCell minWidth="7rem">{t("common.level")}</TableHeaderCell>
+              <TableHeaderCell minWidth="7rem">{t("common.certificates")}</TableHeaderCell>
             </TableHeaderRow>
           }
         >
@@ -99,7 +100,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
             return (
               <TableRow key={assignment.id} rowKey={assignment.id}>
                 <TableCell>
-                  <Link onClick={() => onOpen(person, definition)} accessibleName={`Open ${definition.name} of ${person.name}`}>
+                  <Link onClick={() => onOpen(person, definition)} accessibleName={t("expiry.open", { skill: definition.name, person: person.name })}>
                     {formatDate(endDate)}
                   </Link>
                 </TableCell>
@@ -108,16 +109,12 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
                     style={{ color: STATUS_DISPLAY[status].color, fontWeight: "bold", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}
                   >
                     <Icon name={STATUS_DISPLAY[status].icon} style={{ color: "inherit", width: "1rem", height: "1rem" }} />
-                    {left < 0
-                      ? `Expired ${-left} day${left === -1 ? "" : "s"} ago`
-                      : left === 0
-                        ? "Ends today"
-                        : `${left} day${left === 1 ? "" : "s"} left`}
+                    {left < 0 ? tn("expiry.expiredAgo", -left) : left === 0 ? t("expiry.endsToday") : tn("expiry.daysLeft", left)}
                   </span>
                 </TableCell>
                 <TableCell>
                   <Text>
-                    <Link onClick={() => onOpenPerson(person)} accessibleName={`All skills of ${person.name}`} style={{ fontWeight: "bold" }}>
+                    <Link onClick={() => onOpenPerson(person)} accessibleName={t("person.allSkills", { name: person.name })} style={{ fontWeight: "bold" }}>
                       {person.name}
                     </Link>
                     {needsType.has(person.id) ? ` · ${formatPersonType(person.type)}` : ""}
@@ -130,7 +127,7 @@ export function ExpiryOverview({ state, onOpen, onOpenPerson }: ExpiryOverviewPr
                   <Text>{assignment.proficiencyName ?? "–"}</Text>
                 </TableCell>
                 <TableCell>
-                  <Text>{certs || "None"}</Text>
+                  <Text>{certs || t("common.none")}</Text>
                 </TableCell>
               </TableRow>
             );

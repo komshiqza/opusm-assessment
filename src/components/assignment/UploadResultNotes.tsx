@@ -3,6 +3,7 @@
 import { Button, MessageStrip } from "@ui5/webcomponents-react";
 import { resultLines, type ResultLine, type UploadResults } from "./uploadResults";
 import styles from "./AssignmentDialog.module.css";
+import { t } from "@/lib/i18n/t";
 
 const DESIGN = { uploaded: "Positive", notUploaded: "Negative", unconfirmed: "Critical" } as const;
 
@@ -11,7 +12,7 @@ export function ResultStrip({ line, action, locked }: { line: Omit<ResultLine, "
   return (
     <MessageStrip design={DESIGN[line.kind]} hideCloseButton title={line.detail}>
       {line.text}
-      {line.detail && <span className={styles.srOnly}> Details: {line.detail}</span>}
+      {line.detail && <span className={styles.srOnly}> {t("common.details")}: {line.detail}</span>}
       {action && (
         <>
           {" "}
@@ -41,9 +42,9 @@ export function UploadResultNotes({ results, onRetry, onCheckAgain, locked }: Up
         const file = line.file;
         const action =
           file && line.kind === "notUploaded"
-            ? { text: "Try again", onClick: () => onRetry(file) }
+            ? { text: t("result.tryAgain"), onClick: () => onRetry(file) }
             : file && line.kind === "unconfirmed"
-              ? { text: "Check again", onClick: () => onCheckAgain(file) }
+              ? { text: t("result.checkAgain"), onClick: () => onCheckAgain(file) }
               : undefined;
         return <ResultStrip key={`${line.kind}-${i}`} line={line} action={action} locked={locked} />;
       })}

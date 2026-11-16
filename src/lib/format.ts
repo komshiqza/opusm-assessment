@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n/t";
+
 /** "2026-12-01" → "01.12.2026" (Swiss format, no time-zone conversion). */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -15,8 +17,8 @@ export function formatDateTime(iso: string | null | undefined): string {
 
 /** FSM person types in plain words. The demo company has every technician twice (EMPLOYEE and ERPUSER). */
 export function formatPersonType(type: string | null): string {
-  if (type === "EMPLOYEE") return "Employee";
-  if (type === "ERPUSER") return "ERP user";
+  if (type === "EMPLOYEE") return t("person.employee");
+  if (type === "ERPUSER") return t("person.erpUser");
   return type ?? "";
 }
 

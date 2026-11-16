@@ -14,6 +14,7 @@ import { saveCertificate } from "./saveCertificate";
 import { EMPTY_RESULTS, applyOutcome, type UploadResults } from "./uploadResults";
 import { UploadResultNotes } from "./UploadResultNotes";
 import styles from "./AssignmentDialog.module.css";
+import { t, tn } from "@/lib/i18n/t";
 
 interface CertificateSectionProps {
   assignmentId: string;
@@ -62,10 +63,10 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
       setResults((current) => applyOutcome(current, outcome, rerun));
       const uploaded = outcome.uploaded.length;
       if (uploaded) {
-        setProgress("Refreshing…");
-        const what = `${uploaded} certificate${uploaded > 1 ? "s" : ""} uploaded`;
+        setProgress(t("common.refreshing"));
+        const what = tn("certificates.uploaded", uploaded);
         if (await onChanged()) toast(what);
-        else onRefreshFailed(what.charAt(0).toUpperCase() + what.slice(1));
+        else onRefreshFailed(what);
       }
     } catch (e) {
       setErrors([toUserMessage(e)]);
@@ -77,14 +78,14 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
     }
   };
 
-  const showProgress = (file: File, i: number, total: number) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`);
+  const showProgress = (file: File, i: number, total: number) => setProgress(t("assign.uploading", { name: file.name, i: i + 1, total }));
 
   const send = (items: UploadItem[], rerun: File[] | null, problems: string[] = []) =>
     uploadCertificates(assignmentId, items, showProgress).then((outcome) => ({ outcome, rerun, problems }));
 
   const upload = (files: File[]) =>
     runUpload(async () => {
-      setProgress("Checking files…");
+      setProgress(t("assign.checkingFiles"));
       const { valid, problems } = await splitCertificateFiles(files);
       return send(valid, null, problems);
     });
@@ -95,41 +96,41 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
   /** Check again for uploads that could not be confirmed. Reads only. */
   const checkAgain = (file: File) =>
     runUpload(async () => {
-      setProgress("Checking in FSM…");
+      setProgress(t("common.checkingFsm"));
       return { outcome: await recheckUploads(assignmentId, results.unconfirmed.filter((u) => u.file === file)), rerun: [file] };
     });
 
   return (
     <section className={styles.certificates} aria-labelledby="certificates-title">
       <Title level="H5" id="certificates-title">
-        Certificates ({certificates.length})
+        {t("certificates.title", { n: certificates.length })}
       </Title>
 
       {certificates.length === 0 ? (
-        <Text className={styles.muted}>No certificate attached yet.</Text>
+        <Text className={styles.muted}>{t("certificates.none")}</Text>
       ) : (
         <ul className={styles.certList}>
           {certificates.map((c) => (
             <li key={c.id} className={styles.certItem}>
               <Icon name={TYPE_ICON[c.type] ?? "document"} className={styles.certIcon} />
               <span className={styles.certText}>
-                <Link onClick={() => setPreviewed(c)} accessibleName={`Open ${c.fileName}`}>
+                <Link onClick={() => setPreviewed(c)} accessibleName={t("certificates.open", { name: c.fileName })}>
                   {c.fileName}
                 </Link>
-                <span className={styles.muted}>Uploaded {formatDateTime(c.createdAt)}</span>
+                <span className={styles.muted}>{t("certificates.uploadedAt", { date: formatDateTime(c.createdAt) })}</span>
               </span>
               <Button
                 design="Transparent"
                 icon="download"
-                tooltip={`Download ${c.fileName}`}
-                accessibleName={`Download ${c.fileName}`}
+                tooltip={t("certificates.download", { name: c.fileName })}
+                accessibleName={t("certificates.download", { name: c.fileName })}
                 onClick={() => saveCertificate(c).catch((e: unknown) => setErrors([`${c.fileName}: ${toUserMessage(e)}`]))}
               />
               <Button
                 design="Transparent"
                 icon="delete"
-                tooltip={`Delete ${c.fileName}`}
-                accessibleName={`Delete ${c.fileName}`}
+                tooltip={t("certificates.delete", { name: c.fileName })}
+                accessibleName={t("certificates.delete", { name: c.fileName })}
                 disabled={locked}
                 onClick={() => !operationRef.current && setToDelete(c)}
               />
@@ -151,11 +152,11 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
           }}
         >
           <Button icon="upload" disabled={progress !== null || locked}>
-            Add certificates
+            {t("certificates.add")}
           </Button>
         </FileUploader>
         {progress && <BusyIndicator active delay={0} size="S" />}
-        <Text className={styles.muted}>{progress ?? `PDF, JPG or PNG, max. ${MAX_CERTIFICATE_LABEL} each`}</Text>
+        <Text className={styles.muted}>{progress ?? t("assign.fileRules", { max: MAX_CERTIFICATE_LABEL })}</Text>
       </div>
 
       <UploadResultNotes results={results} onRetry={retry} onCheckAgain={checkAgain} locked={locked || progress !== null} />
@@ -165,7 +166,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
             errors[0]
           ) : (
             <>
-              {errors.length} files were not uploaded:
+              {t("certificates.notUploaded_other", { n: errors.length })}
               <ul className={styles.errorList}>
                 {errors.map((e) => (
                   <li key={e}>{e}</li>
@@ -180,13 +181,13 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
 
       <ConfirmDialog
         open={toDelete !== null}
-        title="Delete certificate?"
-        confirmText="Delete"
+        title={t("certificates.deleteTitle")}
+        confirmText={t("common.delete")}
         onClose={() => setToDelete(null)}
         onConfirm={async () => {
           if (!toDelete) return;
           // The dialog's lock: no save, upload or removal of the assignment may run at the same time.
-          if (operationRef.current) throw new Error("Another action in this dialog is still running. Try again when it has finished.");
+          if (operationRef.current) throw new Error(t("assign.busy"));
           operationRef.current = true;
           onBusyChange(true);
           try {
@@ -196,15 +197,15 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
               await onChanged(); // show what FSM really has now
               throw e;
             }
-            if (await onChanged()) toast("Certificate deleted");
-            else onRefreshFailed("The certificate is deleted");
+            if (await onChanged()) toast(t("certificates.deleted"));
+            else onRefreshFailed(t("certificates.doneDeleted"));
           } finally {
             operationRef.current = false;
             onBusyChange(false);
           }
         }}
       >
-        {`“${toDelete?.fileName ?? ""}” will be deleted from FSM. This cannot be undone.`}
+        {t("certificates.deleteText", { name: toDelete?.fileName ?? "" })}
       </ConfirmDialog>
     </section>
   );

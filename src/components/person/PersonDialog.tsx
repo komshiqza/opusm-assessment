@@ -8,6 +8,7 @@ import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { PersonSkills } from "./PersonSkills";
 import { personSkillRows } from "./personSkillRows";
 import styles from "./PersonSkills.module.css";
+import { t } from "@/lib/i18n/t";
 
 interface PersonDialogProps {
   person: Person;
@@ -40,7 +41,7 @@ export function PersonDialog({ person, state, onOpenCell, onClose }: PersonDialo
           design="Footer"
           endContent={
             <Button design="Transparent" onClick={onClose}>
-              Close
+              {t("common.close")}
             </Button>
           }
         />
@@ -49,7 +50,7 @@ export function PersonDialog({ person, state, onOpenCell, onClose }: PersonDialo
       <div className={styles.summary}>
         <Text>{[person.jobTitle, formatPersonType(person.type)].filter(Boolean).join(" · ") || " "}</Text>
         <Text className={styles.muted}>
-          {held} of {rows.length} skills assigned
+          {t("personView.summary", { held, total: rows.length })}
         </Text>
       </div>
       <PersonSkills personName={person.name} rows={rows} onOpenSkill={(definition) => onOpenCell(person, definition)} />

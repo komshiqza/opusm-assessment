@@ -22,6 +22,7 @@ import type { SkillDefinition } from "@/lib/skills/types";
 import { useToast } from "@/components/common/Toast";
 import { SkillDialog } from "./SkillDialog";
 import { DeleteSkillDialog } from "./DeleteSkillDialog";
+import { t, tn } from "@/lib/i18n/t";
 
 type DialogState = { kind: "create" } | { kind: "edit"; skill: SkillDefinition } | { kind: "delete"; skill: SkillDefinition } | null;
 
@@ -45,15 +46,15 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "0.75rem" }}>
       <Toolbar design="Transparent" style={{ paddingInline: 0 }}>
-        <Title level="H4">Skills ({definitions.length})</Title>
+        <Title level="H4">{t("catalogue.title", { n: definitions.length })}</Title>
         <ToolbarSpacer />
-        <ToolbarButton design="Emphasized" icon="add" text="Create skill" onClick={() => setDialog({ kind: "create" })} />
+        <ToolbarButton design="Emphasized" icon="add" text={t("catalogue.create")} onClick={() => setDialog({ kind: "create" })} />
       </Toolbar>
 
       {definitions.length === 0 ? (
-        <IllustratedMessage name="NoEntries" titleText="No skills yet" subtitleText="Skills you create here appear as columns in the skill matrix.">
+        <IllustratedMessage name="NoEntries" titleText={t("matrix.noSkills")} subtitleText={t("catalogue.noSkillsHint")}>
           <Button design="Emphasized" icon="add" onClick={() => setDialog({ kind: "create" })}>
-            Create skill
+            {t("catalogue.create")}
           </Button>
         </IllustratedMessage>
       ) : (
@@ -61,12 +62,12 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
           overflowMode="Popin"
           headerRow={
             <TableHeaderRow sticky>
-              <TableHeaderCell minWidth="12rem">Skill</TableHeaderCell>
-              <TableHeaderCell minWidth="14rem">Description</TableHeaderCell>
-              <TableHeaderCell minWidth="9rem">Assigned to</TableHeaderCell>
-              <TableHeaderCell minWidth="7rem">Certificates</TableHeaderCell>
+              <TableHeaderCell minWidth="12rem">{t("common.skill")}</TableHeaderCell>
+              <TableHeaderCell minWidth="14rem">{t("catalogue.description")}</TableHeaderCell>
+              <TableHeaderCell minWidth="9rem">{t("catalogue.assignedTo")}</TableHeaderCell>
+              <TableHeaderCell minWidth="7rem">{t("common.certificates")}</TableHeaderCell>
               <TableHeaderCell minWidth="12rem" horizontalAlign="End">
-                Actions
+                {t("common.actions")}
               </TableHeaderCell>
             </TableHeaderRow>
           }
@@ -83,19 +84,19 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
                 </TableCell>
                 <TableCell>
                   <Text>
-                    {u ? `${u.assigned} person${u.assigned > 1 ? "s" : ""}` : "Nobody"}
-                    {u?.attention ? ` (${u.attention} expiring or expired)` : ""}
+                    {u ? tn("catalogue.persons", u.assigned) : t("catalogue.nobody")}
+                    {u?.attention ? t("catalogue.attention", { n: u.attention }) : ""}
                   </Text>
                 </TableCell>
                 <TableCell>
                   <Text>{u?.certificates ?? 0}</Text>
                 </TableCell>
                 <TableCell horizontalAlign="End">
-                  <Button design="Transparent" icon="edit" onClick={() => setDialog({ kind: "edit", skill: d })} accessibleName={`Edit ${d.name}`}>
-                    Edit
+                  <Button design="Transparent" icon="edit" onClick={() => setDialog({ kind: "edit", skill: d })} accessibleName={t("catalogue.editLabel", { skill: d.name })}>
+                    {t("common.edit")}
                   </Button>
-                  <Button design="Transparent" icon="delete" onClick={() => setDialog({ kind: "delete", skill: d })} accessibleName={`Delete ${d.name}`}>
-                    Delete
+                  <Button design="Transparent" icon="delete" onClick={() => setDialog({ kind: "delete", skill: d })} accessibleName={t("catalogue.deleteLabel", { skill: d.name })}>
+                    {t("common.delete")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -111,9 +112,9 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
           onClose={() => setDialog(null)}
           onSaved={async (name) => {
             const refreshed = await state.reload();
-            const saved = dialog.kind === "edit" ? `Skill “${name}” saved` : `Skill “${name}” created`;
+            const saved = dialog.kind === "edit" ? t("catalogue.saved", { name }) : t("catalogue.created", { name });
             // A failed reload shows its own message with "Try again" on the page once the dialog closes.
-            toast(refreshed ? saved : `${saved}, but the list could not be refreshed`);
+            toast(refreshed ? saved : t("catalogue.notRefreshed", { done: saved }));
           }}
         />
       )}
@@ -125,10 +126,10 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
           onDeleted={async (impact) => {
             const refreshed = await state.reload();
             const deleted = impact.assignments
-              ? `Skill “${dialog.skill.name}” deleted with ${impact.assignments} assignment(s) and ${impact.certificates} certificate(s)`
-              : `Skill “${dialog.skill.name}” deleted`;
+              ? t("catalogue.deletedWith", { name: dialog.skill.name, assignments: impact.assignments, certificates: impact.certificates })
+              : t("catalogue.deleted", { name: dialog.skill.name });
             // A failed reload shows its own message with "Try again" on the page once the dialog closes.
-            toast(refreshed ? deleted : `${deleted}, but the list could not be refreshed`);
+            toast(refreshed ? deleted : t("catalogue.notRefreshed", { done: deleted }));
           }}
         />
       )}

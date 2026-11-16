@@ -28,7 +28,10 @@ import { CANDIDATE_ID_VALID } from "@/lib/candidate";
 import { useSkillData } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { ToastProvider } from "./common/Toast";
-import { ThemeMenu, useThemeMenu } from "./common/ThemeMenu";
+import { LanguageMenu, ThemeMenu, useThemeMenu } from "./common/ThemeMenu";
+import { t } from "@/lib/i18n/t";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { DEFAULT_LANGUAGE, readLanguage, setRenderedLanguage, subscribeLanguage } from "@/lib/i18n/language";
 import { SkillMatrix } from "./matrix/SkillMatrix";
 import { SkillCatalog } from "./catalog/SkillCatalog";
 import { AssignmentDialog } from "./assignment/AssignmentDialog";
@@ -38,11 +41,11 @@ import { FindTechnician } from "./findTechnician/FindTechnician";
 import styles from "./SkillManagementApp.module.css";
 
 /** Tab labels; below tablet width short ones, so all four tabs fit next to each other. */
-const TAB_LABELS: Record<TabKey, { full: string; short: string }> = {
-  matrix: { full: "Skill matrix", short: "Matrix" },
-  expiry: { full: "Expiring soon", short: "Expiring" },
-  find: { full: "Find technician for a job", short: "Find" },
-  catalogue: { full: "Skill catalogue", short: "Skills" },
+const TAB_LABELS: Record<TabKey, { full: MessageKey; short: MessageKey }> = {
+  matrix: { full: "tab.matrix", short: "tab.matrix.short" },
+  expiry: { full: "tab.expiry", short: "tab.expiry.short" },
+  find: { full: "tab.find", short: "tab.find.short" },
+  catalogue: { full: "tab.catalogue", short: "tab.catalogue.short" },
 };
 
 const tabKeyOf = (element: HTMLElement | undefined) => element?.dataset.key as TabKey | undefined;
@@ -54,6 +57,10 @@ export function SkillManagementApp() {
   const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition } | null>(null);
   const isPhone = useMediaQuery(PHONE_QUERY);
   const themeMenu = useThemeMenu();
+  const languageMenu = useThemeMenu();
+  // English while React takes over the server's HTML, then the saved choice; a change re-renders the
+  // whole app, and every t() call below draws in this language.
+  setRenderedLanguage(useSyncExternalStore(subscribeLanguage, readLanguage, () => DEFAULT_LANGUAGE));
   const isNarrow = useMediaQuery(NARROW_QUERY);
   const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
@@ -99,42 +106,44 @@ export function SkillManagementApp() {
             logo={
               <span slot="logo" className={styles.logo}>
                 <Icon name="competence" className={styles.logoIcon} />
-                {isPhone && <span>Skill Management</span>}
+                {isPhone && <span>{t("app.title")}</span>}
               </span>
             }
           >
-            Skill Management
+            {t("app.title")}
           </ShellBarBranding>
         }
-        secondaryTitle="Service technicians on SAP FSM"
+        secondaryTitle={t("app.subtitle")}
       >
-        <ShellBarItem icon="palette" text="Theme" onClick={(e) => themeMenu.open(e.detail.targetRef)} />
+        <ShellBarItem icon="world" text={t("language.button")} onClick={(e) => languageMenu.open(e.detail.targetRef)} />
+        <ShellBarItem icon="palette" text={t("theme.button")} onClick={(e) => themeMenu.open(e.detail.targetRef)} />
       </ShellBar>
       <ThemeMenu opener={themeMenu.opener} onClose={themeMenu.close} />
+      <LanguageMenu opener={languageMenu.opener} onClose={languageMenu.close} />
       <main className={styles.main}>
         {!CANDIDATE_ID_VALID && (
           <MessageStrip design="Negative" hideCloseButton>
-            NEXT_PUBLIC_CANDIDATE_ID in .env.local is missing or invalid. All changes are blocked until it is set.
+            {t("app.candidateMissing")}
           </MessageStrip>
         )}
 
         {state.error && state.data && (
           <MessageStrip design="Negative" hideCloseButton>
-            Could not reload the data from FSM: {state.error}{" "}
+            {t("app.reloadFailed", { error: state.error })}{" "}
             <Button design="Transparent" icon="refresh" onClick={() => void state.reload()} disabled={state.refreshing}>
-              {state.refreshing ? "Loading…" : "Try again"}
+              {state.refreshing ? t("app.loadingShort") : t("app.tryAgain")}
             </Button>
           </MessageStrip>
         )}
 
         {state.loading && (
-          <BusyIndicator active delay={0} size="L" text="Loading persons, skills and certificates from FSM…" className={styles.loading} />
+          <BusyIndicator active delay={0} size="L" text={t("app.loading")} className={styles.loading} />
         )}
 
         {!state.loading && !state.data && (
-          <IllustratedMessage name="UnableToLoad" titleText="Could not load data from FSM" subtitleText={state.error ?? "Unknown error"}>
+          <IllustratedMessage name="UnableToLoad" titleText={t("app.loadFailed")} subtitleText={state.error ?? t("app.unknownError")}>
             <Button design="Emphasized" icon="refresh" onClick={() => void state.reload()} disabled={state.refreshing}>
-              {state.refreshing ? "Loading…" : "Try again"}
+              {state.refreshing ? t("app.loadingShort") : t("app.tryAgain")}
             </Button>
           </IllustratedMessage>
         )}
@@ -172,7 +181,7 @@ export function SkillManagementApp() {
                     data-key={key}
                     movable
                     selected={tab === key}
-                    text={`${isNarrow ? TAB_LABELS[key].short : TAB_LABELS[key].full}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
+                    text={`${t(isNarrow ? TAB_LABELS[key].short : TAB_LABELS[key].full)}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
                   >
                     {content[key]}
                   </Tab>
@@ -180,7 +189,7 @@ export function SkillManagementApp() {
               </TabContainer>
             </BusyIndicator>
             <p className={styles.footnote}>
-              Tip: drag a tab to change the order (saved in this browser only).{" "}
+              {t("app.tabTip")}{" "}
               {!isDefaultTabOrder(order) && (
                 <Button
                   design="Transparent"
@@ -190,7 +199,7 @@ export function SkillManagementApp() {
                     resetTabOrder();
                   }}
                 >
-                  Reset tab order
+                  {t("app.resetTabs")}
                 </Button>
               )}
             </p>

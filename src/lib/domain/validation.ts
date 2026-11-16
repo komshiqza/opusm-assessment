@@ -1,5 +1,6 @@
 /** Input validation for the dialogs. Each function returns an error message or null. */
 import { OPEN_END_DATE } from "./status";
+import { t } from "@/lib/i18n/t";
 
 export const MAX_SKILL_NAME_LENGTH = 100;
 function isValidIsoDate(value: string): boolean {
@@ -9,12 +10,17 @@ function isValidIsoDate(value: string): boolean {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
-export function validateValidity(from: string | null, to: string | null): string | null {
-  if (from && !isValidIsoDate(from)) return "“Valid from” is not a valid date. Use the format DD.MM.YYYY.";
-  if (to && !isValidIsoDate(to)) return "“Valid to” is not a valid date. Use the format DD.MM.YYYY.";
-  if (to === OPEN_END_DATE) return "9999-12-31 is reserved for “no end date”. Leave “Valid to” empty instead.";
-  if (from && to && to < from) return "“Valid to” must not be before “Valid from”.";
+/** What is wrong with a validity period, and which field to mark (the message is in the current language). */
+export function validityProblem(from: string | null, to: string | null): { field: "from" | "to"; kind: "invalid" | "reserved" | "beforeFrom"; message: string } | null {
+  if (from && !isValidIsoDate(from)) return { field: "from", kind: "invalid", message: t("validation.fromInvalid") };
+  if (to && !isValidIsoDate(to)) return { field: "to", kind: "invalid", message: t("validation.toInvalid") };
+  if (to === OPEN_END_DATE) return { field: "to", kind: "reserved", message: t("validation.reservedEnd") };
+  if (from && to && to < from) return { field: "to", kind: "beforeFrom", message: t("validation.toBeforeFrom") };
   return null;
+}
+
+export function validateValidity(from: string | null, to: string | null): string | null {
+  return validityProblem(from, to)?.message ?? null;
 }
 
 /** The Skill Service needs a start date, so an empty "valid from" means today. */
@@ -24,10 +30,10 @@ export function effectiveStartDate(from: string | null, today: string): string {
 
 export function validateSkillName(displayName: string, existingDisplayNames: string[]): string | null {
   const name = displayName.trim();
-  if (!name) return "Please enter a name.";
-  if (name.length > MAX_SKILL_NAME_LENGTH) return `The name can have at most ${MAX_SKILL_NAME_LENGTH} characters.`;
-  if (name.includes("::")) return "The name must not contain “::”.";
+  if (!name) return t("validation.nameEmpty");
+  if (name.length > MAX_SKILL_NAME_LENGTH) return t("validation.nameTooLong", { max: MAX_SKILL_NAME_LENGTH });
+  if (name.includes("::")) return t("validation.nameColons");
   const lower = name.toLowerCase();
-  if (existingDisplayNames.some((n) => n.toLowerCase() === lower)) return `A skill named “${name}” already exists.`;
+  if (existingDisplayNames.some((n) => n.toLowerCase() === lower)) return t("validation.nameExists", { name });
   return null;
 }

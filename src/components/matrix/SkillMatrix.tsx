@@ -29,6 +29,7 @@ import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
+import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
 import styles from "./SkillMatrix.module.css";
 
@@ -101,9 +102,9 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
 
   if (definitions.length === 0) {
     return (
-      <IllustratedMessage name="NoEntries" titleText="No skills yet" subtitleText="Create your first skill in the catalogue, then assign it here.">
+      <IllustratedMessage name="NoEntries" titleText={t("matrix.noSkills")} subtitleText={t("matrix.noSkillsHint")}>
         <Button design="Emphasized" icon="add" onClick={onGoToCatalogue}>
-          Go to skill catalogue
+          {t("matrix.goToCatalogue")}
         </Button>
       </IllustratedMessage>
     );
@@ -119,8 +120,14 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     const text = statusText(status, assignment);
     const shortText = compactStatusText(status, assignment);
     const label = assignment
-      ? `${p.name}, ${d.name}: ${text}${assignment.proficiencyName ? `, level ${assignment.proficiencyName}` : ""}, ${certCount ? `${certCount} certificate(s)` : "no certificate"}. Edit.`
-      : `${p.name}, ${d.name}: not assigned. Assign.`;
+      ? t("matrix.cellLabel", {
+          person: p.name,
+          skill: d.name,
+          status: text,
+          level: assignment.proficiencyName ? t("matrix.cellLevel", { level: assignment.proficiencyName }) : "",
+          certificates: certCount ? tn("matrix.cellCertificates", certCount) : t("matrix.cellNoCertificate"),
+        })
+      : t("matrix.cellNotAssigned", { person: p.name, skill: d.name });
     return { assignment, status, certCount, display: STATUS_DISPLAY[status], text, shortText, label };
   };
 
@@ -149,7 +156,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
       <span className={styles.empty}>
         <span aria-hidden>–</span>
         <span className={styles.assignHint}>
-          <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} /> Assign
+          <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} /> {t("common.assign")}
         </span>
       </span>
     );
@@ -158,21 +165,21 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     <div className={styles.wrapper}>
       <div className={styles.toolbar} role="search">
         <div className={styles.field}>
-          <Label for="matrix-person-filter">Person</Label>
+          <Label for="matrix-person-filter">{t("common.person")}</Label>
           <Input
             id="matrix-person-filter"
             icon={<Icon name="search" />}
-            placeholder="Name or job title"
+            placeholder={t("matrix.personFilter")}
             value={personQuery}
             onInput={(e) => setPersonQuery(e.target.value ?? "")}
             showClearIcon
           />
         </div>
         <div className={styles.field}>
-          <Label for="matrix-skill-filter">Skills</Label>
+          <Label for="matrix-skill-filter">{t("matrix.skills")}</Label>
           <MultiComboBox
             id="matrix-skill-filter"
-            placeholder="All skills"
+            placeholder={t("matrix.allSkills")}
             onSelectionChange={(e) => setSkillIds(e.detail.items.map((i) => String(i.dataset.id)))}
           >
             {definitions.map((d) => (
@@ -181,14 +188,14 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           </MultiComboBox>
         </div>
         <div className={styles.field}>
-          <Label for="matrix-status-filter">Status</Label>
+          <Label for="matrix-status-filter">{t("common.status")}</Label>
           <Select id="matrix-status-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.detail.selectedOption.value as StatusFilter)}>
-            <Option value="all">All persons</Option>
-            <Option value="expiring">With a skill expiring soon</Option>
-            <Option value="expired">With an expired skill</Option>
-            <Option value="valid">With a valid skill</Option>
-            <Option value="upcoming">With a skill that starts later</Option>
-            <Option value="none">With a missing skill</Option>
+            <Option value="all">{t("matrix.statusAll")}</Option>
+            <Option value="expiring">{t("matrix.statusExpiring")}</Option>
+            <Option value="expired">{t("matrix.statusExpired")}</Option>
+            <Option value="valid">{t("matrix.statusValid")}</Option>
+            <Option value="upcoming">{t("matrix.statusUpcoming")}</Option>
+            <Option value="none">{t("matrix.statusNone")}</Option>
           </Select>
         </div>
         {filtersActive && (
@@ -201,17 +208,17 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
               setStatusFilter("all");
             }}
           >
-            Reset filters
+            {t("matrix.resetFilters")}
           </Button>
         )}
         <Button design="Transparent" icon="add-employee" className={styles.export} onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
-          Assign to several…
+          {t("matrix.bulk")}
         </Button>
         <Button
           design="Transparent"
           icon="excel-attachment"
           className={styles.exportNext}
-          tooltip="Download the rows and skill columns shown now as a CSV file for Excel"
+          tooltip={t("matrix.exportTooltip")}
           onClick={() =>
             downloadCsv(
               matrixCsv(
@@ -226,27 +233,26 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           }
           disabled={visiblePersons.length === 0}
         >
-          Export CSV
+          {t("matrix.export")}
         </Button>
       </div>
 
       <div className={styles.showRow}>
         <Label id="matrix-show-label" showColon>
-          Show
+          {t("matrix.show")}
         </Label>
         <SegmentedButton
           accessibleNameRef="matrix-show-label"
           onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
         >
           <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
-            Technicians ({technicianCount}
-            {extraCount ? ` + ${extraCount}` : ""})
+            {extraCount ? t("matrix.techniciansPlus", { n: technicianCount, extra: extraCount }) : t("matrix.technicians", { n: technicianCount })}
           </SegmentedButtonItem>
           <SegmentedButtonItem data-key="all" selected={showAllRecords}>
-            All person records ({data.persons.length})
+            {t("matrix.allRecords", { n: data.persons.length })}
           </SegmentedButtonItem>
         </SegmentedButton>
-        {showAllRecords && <Text className={styles.legend}>Includes the linked Employee records and people without a job title.</Text>}
+        {showAllRecords && <Text className={styles.legend}>{t("matrix.allRecordsHint")}</Text>}
       </div>
 
       <div className={styles.summary} aria-live="polite">
@@ -257,26 +263,26 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             icon={STATUS_DISPLAY[s].icon}
             pressed={statusFilter === s}
             onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-            tooltip={statusFilter === s ? "Show all persons again" : `Show only persons with status “${STATUS_DISPLAY[s].label}”`}
+            tooltip={statusFilter === s ? t("matrix.counterShowAll") : t("matrix.counterShowOnly", { status: STATUS_DISPLAY[s].label })}
           >
-            {counts[s]} {STATUS_DISPLAY[s].label.toLowerCase()}
+            {tn(`matrix.counter.${s}`, counts[s])}
           </ToggleButton>
         ))}
         <span className={styles.legend}>
-          <Icon name="attachment" className={styles.chipIcon} /> = certificate attached ·{" "}
-          {isPhone ? "tap a skill to edit, “+” to assign" : "click a cell to assign or edit"}
+          <Icon name="attachment" className={styles.chipIcon} /> {t("matrix.legend")} ·{" "}
+          {isPhone ? t("matrix.legendPhone") : t("matrix.legendDesktop")}
         </span>
       </div>
 
       {visiblePersons.length === 0 ? (
-        <IllustratedMessage name="NoFilterResults" titleText="No persons match the filters" subtitleText="Change or reset the filters." />
+        <IllustratedMessage name="NoFilterResults" titleText={t("matrix.noMatch")} subtitleText={t("matrix.noMatchHint")} />
       ) : isPhone ? (
         // On a phone a wide matrix is hard to use: one card per person, skills stacked.
         <ul className={styles.cards}>
           {visiblePersons.map((p) => (
             <li key={p.id} className={styles.card}>
               <div className={styles.cardHead}>
-                <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={`All skills of ${p.name}`}>
+                <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })}>
                   {p.name}
                 </Link>
                 <span className={styles.personMeta}>{[p.jobTitle, typeOf(p)].filter(Boolean).join(" · ")}</span>
@@ -296,7 +302,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
               </ul>
               {visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
                 <div className={styles.cardMissing}>
-                  <span className={styles.personMeta}>Not assigned:</span>
+                  <span className={styles.personMeta}>{t("matrix.notAssignedList")}</span>
                   {visibleSkills
                     .filter((d) => !assignmentByCell.has(cellKey(p.id, d.id)))
                     .map((d) => (
@@ -305,7 +311,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                         type="button"
                         className={styles.assignChip}
                         onClick={() => onOpenCell(p, d)}
-                        aria-label={`${p.name}, ${d.name}: not assigned. Assign.`}
+                        aria-label={t("matrix.cellNotAssigned", { person: p.name, skill: d.name })}
                       >
                         <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} />
                         {d.name}
@@ -327,7 +333,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
               <thead>
                 <tr>
                   <th scope="col" className={styles.corner}>
-                    Person
+                    {t("common.person")}
                   </th>
                   {visibleSkills.map((d) => (
                     <th key={d.id} scope="col" className={styles.skillHeader} title={d.description ?? d.name}>
@@ -340,7 +346,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                 {visiblePersons.map((p) => (
                   <tr key={p.id}>
                     <th scope="row" className={styles.personCell}>
-                      <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={`All skills of ${p.name}`}>
+                      <Link className={styles.personName} onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })}>
                         {p.name}
                       </Link>
                       <span className={styles.personMeta}>
