@@ -90,8 +90,12 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   /** "ERP user" etc. only with "All person records", or where two records of one person are listed. */
   const needsType = recordsNeedingType(visiblePersons);
   const typeOf = (p: Person) => (showAllRecords || needsType.has(p.id) ? formatPersonType(p.type) : "");
-  /** The record type, and on a linked Employee row (only with "All person records") once, visibly, why its empty cells cannot be assigned. */
-  const recordText = (p: Person) => [typeOf(p), showAllRecords && secondary.has(p.id) ? t("matrix.mainRecordNote") : ""].filter(Boolean).join(" · ");
+  /**
+   * The record type, and on a linked Employee row once, visibly, why its empty cells cannot be assigned.
+   * Mostly in "All person records"; an Employee record that already holds a skill is in the default view too.
+   */
+  const recordText = (p: Person) =>
+    secondary.has(p.id) ? [formatPersonType(p.type), t("matrix.mainRecordNote")].join(" · ") : typeOf(p);
 
   /** Counts over all rows and the visible skills (independent of the person and status filter). */
   const counts = { upcoming: 0, valid: 0, expiring: 0, expired: 0 };
