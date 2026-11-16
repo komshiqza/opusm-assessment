@@ -342,6 +342,8 @@ export const de: Record<MessageKey, string> = {
   "bulk.limit": "Höchstens {max} Personen gleichzeitig.",
   "delete.partial": "{message} Vor dem Fehler bereits gelöscht: {parts}. Laden Sie die Seite neu und versuchen Sie es erneut, um den Vorgang abzuschliessen.",
   "delete.partsAnd": " und ",
+  "delete.leftover_one": "1 Zertifikat wurde während des Entfernens hochgeladen. FSM lässt die App es nicht mehr löschen; es bleibt ohne seine Qualifikation in FSM.",
+  "delete.leftover_other": "{n} Zertifikate wurden während des Entfernens hochgeladen. FSM lässt die App sie nicht mehr löschen; sie bleiben ohne ihre Qualifikation in FSM.",
   "delete.certificates_one": "1 Zertifikat",
   "delete.certificates_other": "{n} Zertifikate",
   "delete.assignments_one": "1 Zuweisung",

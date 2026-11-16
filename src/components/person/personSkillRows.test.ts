@@ -24,7 +24,7 @@ const held: Record<string, ReturnType<typeof assignment>> = {
 const certificates = new Map([["S1", [{ id: "C1", skillId: "S1", fileName: "weld.pdf", type: "PDF", createdAt: null }]]]);
 
 describe("personSkillRows (all skills of one person)", () => {
-  const rows = personSkillRows("anna", definitions, (p, t) => held[`${p}|${t}`], certificates, TODAY);
+  const rows = personSkillRows(["anna"], definitions, (p, t) => held[`${p}|${t}`], certificates, TODAY);
 
   it("lists every skill of the catalogue: held ones first, then the ones to assign", () => {
     expect(rows.map((r) => [r.definition.id, r.status])).toEqual([
@@ -45,5 +45,22 @@ describe("personSkillRows (all skills of one person)", () => {
     const heights = rows.find((r) => r.definition.id === "HEIGHTS")!;
     expect(heights.assignment).toBeUndefined();
     expect(heights.certificates).toEqual([]);
+  });
+});
+
+describe("personSkillRows across a person's records (opened from Find technician)", () => {
+  const split: Record<string, ReturnType<typeof assignment>> = {
+    "annaU|AID": assignment("S2", "AID", null),
+    "annaE|WELD": assignment("S1", "WELD", "2026-11-20"), // held by the Employee record
+  };
+  const rows = personSkillRows(["annaU", "annaE"], definitions, (p, t) => split[`${p}|${t}`], certificates, TODAY);
+
+  it("shows a skill held by any of the records, with the record that holds it", () => {
+    expect(rows.map((r) => [r.definition.id, r.status, r.holderId])).toEqual([
+      ["AID", "valid", "annaU"],
+      ["WELD", "expiring", "annaE"],
+      ["HEIGHTS", "none", "annaU"], // not held: "Assign" goes to the first (main) record
+    ]);
+    expect(rows.find((r) => r.definition.id === "WELD")!.certificates.map((c) => c.fileName)).toEqual(["weld.pdf"]);
   });
 });

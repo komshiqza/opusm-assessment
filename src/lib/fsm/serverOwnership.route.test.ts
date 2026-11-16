@@ -18,6 +18,8 @@ const DEMO_TAG = id("D"); // "Gasnetz-Anschluss", seeded demo data
 const JDOE_TAG = id("E"); // "jdoe::Welding", another candidate
 const OWN_TAG = id("A"); // "komshiqza::Welding"
 const OWN_SCALE = id("5");
+const OWN_LEVEL = id("B"); // "Basic" of our scale
+const FOREIGN_LEVEL = id("6"); // a level of another scale
 const DEMO_SKILL = id("1");
 const JDOE_SKILL = id("2");
 const OWN_SKILL = id("3");
@@ -72,6 +74,7 @@ beforeEach(() => {
         });
       }
       if (url.pathname.endsWith("/v1/scales/search")) return json({ last: true, content: [{ id: OWN_SCALE, name: "komshiqza::Proficiency" }] });
+      if (url.pathname.endsWith(`/v1/scales/${OWN_SCALE}/proficiencies/search`)) return json({ last: true, content: [{ id: OWN_LEVEL, name: "Basic" }] });
     }
     if (method === "GET" && url.pathname.startsWith("/api/data/v4/Attachment/")) {
       const objectId = { [DEMO_ATTACHMENT]: DEMO_SKILL, [OWN_ATTACHMENT]: OWN_SKILL }[url.pathname.split("/")[5]];
@@ -133,6 +136,8 @@ describe("refused on the server: 403, and nothing reaches FSM", () => {
     ["create our tag with an extra field", "POST", "skill/v2/tags", [{ name: "komshiqza::Crane", scaleId: OWN_SCALE, scale: { id: id("6") } }]],
     ["delete our tag with an extra field", "DELETE", "skill/v2/tags", [{ id: OWN_TAG, name: "x" }]],
     ["delete our skill with an extra field", "DELETE", "skill/v2/skills", [{ id: OWN_SKILL, tagId: DEMO_TAG }]],
+    ["assign our tag with a level of another scale", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, proficiencyId: FOREIGN_LEVEL, startDate: "2026-01-01" }]],
+    ["edit our skill to a level of another scale", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { proficiencyId: FOREIGN_LEVEL, endDate: "2027-01-01" }],
   ] as const)("%s", async (_name, method, path, body) => {
     const res = await send(method, path, body);
     expect(res.status).toBe(403);
@@ -183,9 +188,9 @@ describe("our own writes still reach FSM", () => {
     ["rename our tag", "POST", "skill/v2/tags", [{ id: OWN_TAG, name: "komshiqza::Welding 2", description: " ", scaleId: OWN_SCALE }]],
     ["delete our tag", "DELETE", "skill/v2/tags", [{ id: OWN_TAG }]],
     ["assign our tag", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, startDate: "2026-01-01" }]],
-    ["assign our tag with level and end, as the app sends it", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, proficiencyId: id("6"), startDate: "2026-01-01", endDate: "2027-01-01" }]],
+    ["assign our tag with level and end, as the app sends it", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, proficiencyId: OWN_LEVEL, startDate: "2026-01-01", endDate: "2027-01-01" }]],
     ["create the scale with its three levels, as the app sends it", "POST", "skill/v1/scales", { name: "komshiqza::Proficiency", proficiencies: [{ name: "Basic", isDefault: true }, { name: "Advanced" }, { name: "Expert" }] }],
-    ["edit our skill as the app sends it", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { proficiencyId: id("6"), startDate: "2026-01-01", endDate: "9999-12-31" }],
+    ["edit our skill as the app sends it", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { proficiencyId: OWN_LEVEL, startDate: "2026-01-01", endDate: "9999-12-31" }],
     ["edit our skill", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { endDate: "2027-01-01", proficiencyId: null }],
     ["delete our skill", "DELETE", "skill/v2/skills", [{ id: OWN_SKILL }]],
     ["upload a certificate to our skill", "POST", "data/v4/Attachment", upload(OWN_SKILL)],

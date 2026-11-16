@@ -31,6 +31,8 @@ export interface OwnershipReader {
   ownSkills(): Promise<Map<string, { tagId: string }>>;
   /** Own scale ids */
   ownScales(): Promise<Set<string>>;
+  /** Ids of the levels (proficiencies) of own scales */
+  ownLevels(): Promise<Set<string>>;
   /** The object an attachment is linked to, or null if it does not exist */
   attachment(id: string): Promise<{ objectType: string; objectId: string } | null>;
 }
@@ -180,7 +182,7 @@ const CHECKS: Record<string, (input: CheckInput) => Promise<void>> = {
       onlyFields(item, ["tagId", "technician", "proficiencyId", "startDate", "endDate"], "skill");
       await assertOwnTag(asId(item.tagId), reader);
       asId(item.technician);
-      if (item.proficiencyId !== undefined) asId(item.proficiencyId);
+      if (item.proficiencyId !== undefined) await assertOwnLevel(asId(item.proficiencyId), reader);
       asDate(item.startDate);
       if (item.endDate !== undefined) asDate(item.endDate);
     }
@@ -196,7 +198,7 @@ const CHECKS: Record<string, (input: CheckInput) => Promise<void>> = {
     const skill = await assertOwnSkill(asId(skillId), reader);
     if (skill.tagId !== asId(tagId)) throw new OwnershipError("Refused: this skill does not belong to the tag in the path.");
     const patch = onlyFields(asObject(await body()), ["proficiencyId", "startDate", "endDate"], "skill change");
-    if (patch.proficiencyId !== undefined && patch.proficiencyId !== null) asId(patch.proficiencyId);
+    if (patch.proficiencyId !== undefined && patch.proficiencyId !== null) await assertOwnLevel(asId(patch.proficiencyId), reader);
     if (patch.startDate !== undefined) asDate(patch.startDate);
     if (patch.endDate !== undefined) asDate(patch.endDate);
   },
@@ -246,6 +248,11 @@ async function assertOwnSkill(id: string, reader: OwnershipReader): Promise<{ ta
   const skill = (await reader.ownSkills()).get(id);
   if (!skill) throw new OwnershipError(`Refused: skill ${id} does not belong to one of your tags.`);
   return skill;
+}
+
+/** A level may only come from one of our own scales (the app only offers those). */
+async function assertOwnLevel(id: string, reader: OwnershipReader) {
+  if (!(await reader.ownLevels()).has(id)) throw new OwnershipError(`Refused: level ${id} is not a level of a scale in your namespace "${NAME_PREFIX}".`);
 }
 
 async function assertOwnScale(id: string, reader: OwnershipReader) {
@@ -299,6 +306,10 @@ export function fsmOwnershipReader(): OwnershipReader {
     let cached: Promise<T> | null = null;
     return () => (cached ??= load());
   };
+  const ownScales = once(async () => {
+    const scales = await skillServiceSearch<{ id: string; name: string; deleted?: boolean }>("v1/scales", "name");
+    return new Set(scales.filter((s) => !s.deleted && isOwnName(s.name)).map((s) => s.id));
+  });
   return {
     ownTags: once(async () => {
       const tags = await skillServiceSearch<{ id: string; name: string; scaleId: string | null; deleted?: boolean }>("v1/tags", "name");
@@ -308,9 +319,13 @@ export function fsmOwnershipReader(): OwnershipReader {
       const skills = await skillServiceSearch<{ id: string; tagId: string; tagName: string; deleted?: boolean }>("v1/skills", "tag.name");
       return new Map(skills.filter((s) => !s.deleted && isOwnName(s.tagName)).map((s) => [s.id, { tagId: s.tagId }]));
     }),
-    ownScales: once(async () => {
-      const scales = await skillServiceSearch<{ id: string; name: string; deleted?: boolean }>("v1/scales", "name");
-      return new Set(scales.filter((s) => !s.deleted && isOwnName(s.name)).map((s) => s.id));
+    ownScales,
+    ownLevels: once(async () => {
+      const ids = new Set<string>();
+      for (const scaleId of await ownScales()) {
+        for (const level of await skillServiceSearch<{ id: string }>(`v1/scales/${encodeURIComponent(scaleId)}/proficiencies`, null)) ids.add(level.id);
+      }
+      return ids;
     }),
     attachment: async (id) => {
       const res = await fsmFetch(`/api/data/v4/Attachment/${encodeURIComponent(id)}?dtos=${DTO.Attachment}`);
@@ -336,13 +351,14 @@ async function fsmFetch(path: string, init: RequestInit = {}): Promise<Response>
   });
 }
 
-/** Everything in the own namespace from one Skill Service search, all pages. */
-async function skillServiceSearch<T>(resource: string, nameField: string): Promise<T[]> {
+/** One Skill Service search, all pages: everything in the own namespace (`nameField`), or everything under `resource` (null). */
+async function skillServiceSearch<T>(resource: string, nameField: string | null): Promise<T[]> {
   const out: T[] = [];
+  const filter = nameField ? [{ field: nameField, operator: "like", value: `${NAME_PREFIX}%` }] : [];
   for (let page = 0; page < 50; page++) {
     const res = await fsmFetch(`/cloud-skill-service/api/${resource}/search`, {
       method: "POST",
-      body: JSON.stringify({ filter: [{ field: nameField, operator: "like", value: `${NAME_PREFIX}%` }], page, size: 1000 }),
+      body: JSON.stringify({ filter, page, size: 1000 }),
     });
     if (!res.ok) throw new Error(`FSM answered ${res.status}`);
     const data = (await res.json()) as { content?: T[]; last?: boolean };

@@ -249,6 +249,7 @@ export async function deleteSkillDefinition(tagId: string, confirmed: Pick<Delet
       const res = await skillApi<BulkResponse>("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) });
       done.assignments = res.results.filter((r) => r.status < 400).length; // counted before a partial failure throws
       assertBulkOk(res);
+      await assertNoCertificateLeft(skillIds);
     }
     assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
     return done;
@@ -269,6 +270,15 @@ async function deleteLateCertificates(skillIds: string[]): Promise<number> {
   const late = await loadCertificates(skillIds);
   for (const c of late) await fsmDelete("Attachment", c.id);
   return late.length;
+}
+
+/**
+ * A certificate whose upload finished between the last look and the delete cannot be deleted any
+ * more (its skill is gone, so the server no longer counts it as ours). It is reported, never hidden.
+ */
+async function assertNoCertificateLeft(skillIds: string[]): Promise<void> {
+  const left = await loadCertificates(skillIds);
+  if (left.length) throw new Error(tn("delete.leftover", left.length));
 }
 
 /** Adds "already deleted: …" to an error from a cascade that stopped half-way. */
@@ -360,6 +370,7 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
   } catch (e) {
     throw withProgress(e, done);
   }
+  await assertNoCertificateLeft([assignmentId]); // the removal itself is complete: nothing to try again
 }
 
 // --- Checks after a write FSM did not answer -------------------------------------------

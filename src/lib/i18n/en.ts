@@ -343,6 +343,8 @@ export const en = {
   "bulk.limit": "At most {max} persons at once.",
   "delete.partial": "{message} Already deleted before the error: {parts}. Reload and try again to finish.",
   "delete.partsAnd": " and ",
+  "delete.leftover_one": "1 certificate was uploaded while this was being removed. FSM no longer lets the app delete it, so it stays in FSM without its skill.",
+  "delete.leftover_other": "{n} certificates were uploaded while this was being removed. FSM no longer lets the app delete them, so they stay in FSM without their skill.",
   "delete.certificates_one": "1 certificate",
   "delete.certificates_other": "{n} certificates",
   "delete.assignments_one": "1 assignment",

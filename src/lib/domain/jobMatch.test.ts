@@ -166,8 +166,9 @@ describe("one person with several records (ERP user and Employee, linked by refI
     return { lookup, result: matchTechnicians(groups.map((g) => g.person), required, (p, s) => lookup(p, s)?.held, JOB, TODAY, min) };
   };
 
-  it("is one person, shown by the ERP user record", () => {
+  it("is one person, shown by the ERP user record, which comes first among her records (also when the list has Employee first)", () => {
     expect(groupPersonRecords(anna).map((g) => [g.person.id, g.records.map((r) => r.id)])).toEqual([["annaU", ["annaU", "annaE"]]]);
+    expect(groupPersonRecords([anna[1], anna[0]]).map((g) => [g.person.id, g.records.map((r) => r.id)])).toEqual([["annaU", ["annaU", "annaE"]]]);
   });
 
   it("is ready when the job's skills are spread over her records (Welding on Employee, First aid on ERP user)", () => {

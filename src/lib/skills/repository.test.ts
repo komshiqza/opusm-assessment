@@ -203,6 +203,26 @@ describe("own data", () => {
     ]);
   });
 
+  it.each(["an assignment", "a skill"])("removing %s reports a certificate that arrived after the last look (it cannot be deleted any more)", async (what) => {
+    fsm.searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding", technicianId: PERSON }];
+      return [];
+    };
+    let skillDeleted = false;
+    fsm.bulkAnswer = (path, method) => {
+      if (path === "skill/v2/skills" && method === "DELETE") skillDeleted = true;
+      return null;
+    };
+    const cert = (id: string) => ({ a: { id, fileName: `${id}.pdf`, type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } });
+    // The upload finishes between the last look and the delete: FSM lists it only afterwards.
+    fsm.queryAnswer = (sql) => (sql.includes("FROM Attachment a WHERE") && skillDeleted ? [cert(LATE)] : []);
+
+    const removal = what === "an assignment" ? deleteAssignment(SKILL) : deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [] });
+    await expect(removal).rejects.toThrow(/1 certificate was uploaded while this was being removed/);
+    expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual(["DELETE skill/v2/skills"]); // the tag is not deleted after this
+  });
+
   it("reports what was already deleted when a cascade fails half-way", async () => {
     fsm.searchAnswer = (path) => {
       if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];

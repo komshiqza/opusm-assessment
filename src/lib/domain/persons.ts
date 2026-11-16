@@ -52,10 +52,13 @@ export function selectPersonRows<P extends PersonRecord>(persons: P[], personIds
 
 /**
  * One entry per physical person, for "Find technician" (which asks about people, not records): the
- * main record stands for the person, `records` are all of the person's given records.
+ * main record stands for the person, `records` are all of the person's given records, the main one first.
  */
 export function groupPersonRecords<P extends PersonRecord>(rows: P[]): { person: P; records: P[] }[] {
-  return groupByPhysicalPerson(rows).map((records) => ({ person: mainRecord(records), records }));
+  return groupByPhysicalPerson(rows).map((group) => {
+    const person = mainRecord(group);
+    return { person, records: [person, ...group.filter((p) => p !== person)] };
+  });
 }
 
 /**

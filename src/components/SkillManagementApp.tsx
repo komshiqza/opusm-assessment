@@ -67,7 +67,9 @@ export function SkillManagementApp() {
   const tab = pickedTab ?? order[0];
   const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
   /** The person whose skills are shown (the assignment dialog can open on top of it). */
-  const [personShown, setPersonShown] = useState<Person | null>(null);
+  /** The person whose skills are shown; `records`: all of their linked records (Find technician). */
+  const [personShown, setPersonShown] = useState<{ person: Person; records?: Person[] } | null>(null);
+  const showPerson = (person: Person, records?: Person[]) => setPersonShown({ person, records });
 
   /** After a move the strip is rebuilt; put keyboard focus back on the moved tab. */
   const focusAfterMove = useRef<TabKey | null>(null);
@@ -91,9 +93,9 @@ export function SkillManagementApp() {
   }, [order]);
 
   const content: Record<TabKey, ReactNode> = {
-    matrix: <SkillMatrix state={state} onOpenCell={openCell} onOpenPerson={setPersonShown} onGoToCatalogue={() => setTab("catalogue")} />,
-    expiry: <ExpiryOverview state={state} onOpen={openCell} onOpenPerson={setPersonShown} />,
-    find: <FindTechnician state={state} onOpen={openCell} onOpenPerson={setPersonShown} />,
+    matrix: <SkillMatrix state={state} onOpenCell={openCell} onOpenPerson={showPerson} onGoToCatalogue={() => setTab("catalogue")} />,
+    expiry: <ExpiryOverview state={state} onOpen={openCell} onOpenPerson={showPerson} />,
+    find: <FindTechnician state={state} onOpen={openCell} onOpenPerson={showPerson} />,
     catalogue: <SkillCatalog state={state} />,
   };
 
@@ -207,7 +209,7 @@ export function SkillManagementApp() {
         )}
       </main>
 
-      {personShown && <PersonDialog person={personShown} state={state} onOpenCell={openCell} onClose={() => setPersonShown(null)} />}
+      {personShown && <PersonDialog person={personShown.person} records={personShown.records} state={state} onOpenCell={openCell} onClose={() => setPersonShown(null)} />}
       {cell && <AssignmentDialog key={`${cell.person.id}|${cell.definition.id}`} {...cell} state={state} onClose={() => setCell(null)} />}
     </ToastProvider>
   );

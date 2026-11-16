@@ -39,8 +39,8 @@ const ANY_LEVEL = "any";
 interface FindTechnicianProps {
   state: SkillDataState;
   onOpen: (person: Person, definition: SkillDefinition) => void;
-  /** Shows all skills and certificates of one person. */
-  onOpenPerson: (person: Person) => void;
+  /** Shows all skills and certificates of one person, across all of their records. */
+  onOpenPerson: (person: Person, records: Person[]) => void;
 }
 
 /**
@@ -72,6 +72,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   );
   const holder = heldAcrossRecords(people, (recordId, skillId) => state.assignmentByCell.get(cellKey(recordId, skillId)), jobDate, today, minLevel);
   const lookup = (personId: string, skillId: string) => holder(personId, skillId)?.held;
+  const recordsOf = (p: Person) => people.find((g) => g.person.id === p.id)?.records ?? [p];
   const withoutJobTitle = useMemo(() => personsWithoutJobTitle(state.data?.persons ?? []), [state.data]);
   const result = dateError
     ? null
@@ -116,7 +117,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const personCell = (p: Person, technician: boolean) => (
     <TableCell>
       <span className={styles.person}>
-        <Link onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })} className={styles.personLink}>
+        <Link onClick={() => onOpenPerson(p, recordsOf(p))} accessibleName={t("person.allSkills", { name: p.name })} className={styles.personLink}>
           {p.name}
         </Link>
         <span className={styles.muted}>{p.jobTitle}</span>

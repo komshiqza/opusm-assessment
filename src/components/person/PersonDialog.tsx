@@ -12,6 +12,8 @@ import { t } from "@/lib/i18n/t";
 
 interface PersonDialogProps {
   person: Person;
+  /** All records of this person, the main one first (from Find technician); default: just `person`. */
+  records?: Person[];
   state: SkillDataState;
   /** Opens the assignment dialog for one skill (it opens on top; this view updates after a save). */
   onOpenCell: (person: Person, definition: SkillDefinition) => void;
@@ -19,10 +21,10 @@ interface PersonDialogProps {
 }
 
 /** All skills and certificates of one person, from data the app already loaded. */
-export function PersonDialog({ person, state, onOpenCell, onClose }: PersonDialogProps) {
+export function PersonDialog({ person, records = [person], state, onOpenCell, onClose }: PersonDialogProps) {
   const today = useToday();
   const rows = personSkillRows(
-    person.id,
+    records.map((r) => r.id),
     state.data?.definitions ?? [],
     (personId, tagId) => state.assignmentByCell.get(cellKey(personId, tagId)),
     state.certificatesBySkill,
@@ -53,7 +55,14 @@ export function PersonDialog({ person, state, onOpenCell, onClose }: PersonDialo
           {t("personView.summary", { held, total: rows.length })}
         </Text>
       </div>
-      <PersonSkills personName={person.name} rows={rows} onOpenSkill={(definition) => onOpenCell(person, definition)} />
+      <PersonSkills
+        personName={person.name}
+        rows={rows}
+        onOpenSkill={(definition) => {
+          const holderId = rows.find((r) => r.definition.id === definition.id)?.holderId;
+          onOpenCell(records.find((r) => r.id === holderId) ?? person, definition);
+        }}
+      />
     </Dialog>
   );
 }
