@@ -357,13 +357,15 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
 
 // --- Writes: certificates (Attachments) --------------------------------------------------
 
-export async function uploadCertificate(assignmentId: string, file: File): Promise<Certificate> {
+/** Uploads one file. `uploadId` goes into the description, so a check after a timeout can find this upload. */
+export async function uploadCertificate(assignmentId: string, file: File, uploadId: string = newUploadId()): Promise<Certificate> {
   const check = await inspectCertificateFile(file);
   if (!check.ok) throw new Error(check.error);
   await assertOwnSkill(assignmentId);
   const created = await fsmCreate<FsmAttachment>("Attachment", {
     fileName: file.name,
     title: file.name,
+    description: uploadDescription(uploadId),
     type: check.type,
     fileContent: await fileToBase64(file),
     object: { objectId: assignmentId, objectType: "SKILL" },
@@ -372,36 +374,129 @@ export async function uploadCertificate(assignmentId: string, file: File): Promi
 }
 
 export interface UploadOutcome {
+  /** Certificates now in FSM, including ones confirmed after FSM answered too late. */
   uploaded: Certificate[];
-  /** Files FSM did not accept, with the reason for the user. Nothing else was lost. */
-  failed: { file: File; error: string }[];
+  /** Files FSM answered too late for, but the check found them in FSM ("Uploaded ✓"). */
+  confirmedLate: File[];
   /**
-   * Files FSM did not answer for in time: they may be uploaded or not. Never retried automatically;
-   * the user checks the refreshed list first (a blind retry could upload the file twice).
+   * Files that are not in FSM, with the reason for the user; the user may try again.
+   * `uploadId`: the upload timed out; a retry first looks for this id, so a file that arrived late
+   * is not uploaded twice.
    */
-  unknown: { file: File; error: string }[];
+  failed: { file: File; error: string; uploadId?: string }[];
+  /** FSM answered too late and the check could not decide ("Not confirmed yet"): never retried, only checked again. */
+  unconfirmed: { file: File; error: string; uploadId: string }[];
+}
+
+/** A file to upload; after a timed-out upload, with that upload's id. */
+export type UploadItem = File | { file: File; uploadId: string };
+
+/** The "not uploaded" files as retry items: a timed-out one keeps its upload id, so the retry checks first. */
+export function retryItems(failed: UploadOutcome["failed"]): UploadItem[] {
+  return failed.map((f) => (f.uploadId === undefined ? f.file : { file: f.file, uploadId: f.uploadId }));
+}
+
+/** What one look into FSM after a timed-out write found. Reads only. */
+export type WriteCheck<T> = { result: "done"; value: T } | { result: "notDone" } | { result: "unconfirmed"; error: string };
+
+/**
+ * Every upload gets its own id in the attachment's description, so a check after a timeout finds
+ * exactly this upload: another file with the same name can never be taken for it. (Measured: the
+ * Query API finds an attachment by its description right after the upload.)
+ */
+const UPLOAD_ID = /^[0-9a-f]{32}$/;
+const uploadDescription = (uploadId: string) => `Skill Management upload ${uploadId}`;
+const newUploadId = () => crypto.randomUUID().replaceAll("-", "");
+
+/** Did the upload with this id arrive? Reads only. */
+export async function checkCertificateUploaded(assignmentId: string, uploadId: string): Promise<WriteCheck<Certificate>> {
+  try {
+    assertFsmId(assignmentId);
+    if (!UPLOAD_ID.test(uploadId)) throw new Error("Invalid upload id.");
+    const rows = await fsmQuery<{ a: FsmAttachment }>(
+      `SELECT a.id, a.fileName, a.type, a.createDateTime, a.object FROM Attachment a WHERE a.object.objectType = 'SKILL' AND a.object.objectId = '${assignmentId}' AND a.description = '${uploadDescription(uploadId)}'`,
+      ["Attachment"],
+    );
+    return rows.length ? { result: "done", value: toCertificate(rows[0].a) } : { result: "notDone" };
+  } catch (e) {
+    return { result: "unconfirmed", error: toUserMessage(e) };
+  }
+}
+
+const NOT_UPLOADED = "FSM did not answer in time, and the file is not in FSM. Not uploaded. You can try again.";
+
+/** Sorts one check result into the outcome lists. */
+function recordCheck(outcome: UploadOutcome, file: File, uploadId: string, check: WriteCheck<Certificate>): void {
+  if (check.result === "done") {
+    outcome.uploaded.push(check.value);
+    outcome.confirmedLate.push(file);
+  } else if (check.result === "notDone") {
+    outcome.failed.push({ file, error: NOT_UPLOADED, uploadId });
+  } else {
+    outcome.unconfirmed.push({ file, error: check.error, uploadId });
+  }
 }
 
 /**
- * Uploads files one after another to one assignment. A failed file does not stop the others;
- * it is returned with FSM's message so the user can retry exactly those files.
+ * Uploads files one after another to one assignment. A failed file does not stop the others; it is
+ * returned with FSM's message so the user can retry exactly those files. A file FSM does not answer
+ * for is looked up in FSM right away (read only) and never sent again by the app itself.
  */
 export async function uploadCertificates(
   assignmentId: string,
-  files: File[],
+  items: UploadItem[],
   onProgress?: (file: File, index: number, total: number) => void,
 ): Promise<UploadOutcome> {
-  const outcome: UploadOutcome = { uploaded: [], failed: [], unknown: [] };
-  for (const [index, file] of files.entries()) {
-    onProgress?.(file, index, files.length);
+  const outcome: UploadOutcome = { uploaded: [], confirmedLate: [], failed: [], unconfirmed: [] };
+  for (const [index, item] of items.entries()) {
+    const file = item instanceof File ? item : item.file;
+    onProgress?.(file, index, items.length);
+    if (!(item instanceof File)) {
+      // A retry after a timeout: first make sure the earlier upload did not arrive late.
+      const check = await checkCertificateUploaded(assignmentId, item.uploadId);
+      if (check.result !== "notDone") {
+        recordCheck(outcome, file, item.uploadId, check);
+        continue;
+      }
+    }
+    const uploadId = newUploadId();
     try {
-      outcome.uploaded.push(await uploadCertificate(assignmentId, file));
+      outcome.uploaded.push(await uploadCertificate(assignmentId, file, uploadId));
     } catch (e) {
-      const unknownResult = e instanceof FsmTimeoutError && e.write;
-      (unknownResult ? outcome.unknown : outcome.failed).push({ file, error: toUserMessage(e) });
+      if (e instanceof FsmTimeoutError && e.write) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId));
+      else outcome.failed.push({ file, error: toUserMessage(e) });
     }
   }
   return outcome;
+}
+
+/** "Check again" for uploads that could not be confirmed. Reads only; uploads nothing. */
+export async function recheckUploads(assignmentId: string, unconfirmed: UploadOutcome["unconfirmed"]): Promise<UploadOutcome> {
+  const outcome: UploadOutcome = { uploaded: [], confirmedLate: [], failed: [], unconfirmed: [] };
+  for (const { file, uploadId } of unconfirmed) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId));
+  return outcome;
+}
+
+/**
+ * Did a timed-out create arrive? Looks for this person's assignment of this skill (Skill Service,
+ * which shows a new skill immediately). Reads only.
+ */
+export async function checkAssignmentCreated(tagId: string, personId: string): Promise<WriteCheck<Assignment>> {
+  try {
+    assertFsmId(tagId);
+    assertFsmId(personId);
+    const found = (
+      await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [
+        { field: "tag.id", operator: "=", value: tagId },
+        { field: "technicianId", operator: "=", value: personId },
+      ])
+    ).filter((s) => !s.deleted && s.tagId === tagId);
+    if (found.length === 0) return { result: "notDone" };
+    if (found.length === 1 && isOwnName(found[0].tagName)) return { result: "done", value: toAssignment(found[0]) };
+    return { result: "unconfirmed", error: "FSM shows an unexpected answer for this person and skill. Reload the page to see what is stored." };
+  } catch (e) {
+    return { result: "unconfirmed", error: toUserMessage(e) };
+  }
 }
 
 /**

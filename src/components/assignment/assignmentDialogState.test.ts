@@ -22,6 +22,14 @@ describe("primaryAction (the main button of the assignment dialog)", () => {
     expect(primaryAction({ listed: true, createdId: null, removed: true })).toBe("none");
   });
 
+  it("offers no Assign while a timed-out create could not be confirmed (only Check again)", () => {
+    expect(primaryAction({ listed: false, createdId: null, removed: false, createUnconfirmed: true })).toBe("none");
+  });
+
+  it("offers Assign again only when the check found that the timed-out create is not in FSM", () => {
+    expect(primaryAction({ listed: false, createdId: null, removed: false, createUnconfirmed: false })).toBe("assign");
+  });
+
   it("offers nothing while a saved change waits for the list before closing, so a later edit cannot be lost", () => {
     expect(primaryAction({ listed: true, createdId: null, removed: false, savedWaitingForRefresh: true })).toBe("none");
   });

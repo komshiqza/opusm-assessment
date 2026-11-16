@@ -10,6 +10,9 @@ import {
   createAssignment,
   createAssignmentWithCertificates,
   createSkillDefinition,
+  checkAssignmentCreated,
+  recheckUploads,
+  retryItems,
   uploadCertificates,
   loadCertificateFile,
   deleteAssignment,
@@ -50,6 +53,12 @@ let attachmentAnswer: unknown = null;
 let failingUploads: Set<string>;
 /** Attachment uploads with these file names never get an answer from the fake FSM. */
 let hangingUploads: Set<string>;
+/** Attachments FSM has on our skill (the fake's own store, used by the timeout checks). */
+let fsmAttachments: { id: string; fileName: string; description?: string }[];
+/** A hanging upload is still stored by the fake FSM (the write arrived, only the answer is lost). */
+let hangingUploadsArrive: boolean;
+/** CoreSQL queries fail (e.g. the check after a timeout cannot reach FSM). */
+let queriesFail: boolean;
 /** Skill Service writes to this path never get an answer from the fake FSM (e.g. "skill/v2/skills"). */
 let hangingWrite: string | null = null;
 /** Answer of bulk (v2) writes; default: every item succeeded. */
@@ -68,6 +77,9 @@ beforeEach(() => {
   failingUploads = new Set();
   hangingUploads = new Set();
   hangingWrite = null;
+  fsmAttachments = [];
+  hangingUploadsArrive = false;
+  queriesFail = false;
   bulkAnswer = () => null;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input, "http://localhost");
@@ -77,6 +89,7 @@ beforeEach(() => {
     calls.push({ method, path, body });
 
     if (path.startsWith("data/v4/Attachment/") && method === "DELETE") deletedAttachments.add(path.split("/")[3]);
+    if (path === "query/v1" && queriesFail) return json({ error: "simulated outage" }, 503);
     if (path === "query/v1") {
       const rows = queryAnswer(body.query).filter((r) => !deletedAttachments.has((r as { a?: { id: string } }).a?.id ?? ""));
       return json({ data: rows, lastPage: 1 });
@@ -100,8 +113,10 @@ beforeEach(() => {
     if (path.startsWith("data/v4/Attachment") && method === "POST") {
       if (failingUploads.has(body.fileName)) return json({ error: "CA-999", message: "CA-999: simulated upload failure" }, 500);
       if (hangingUploads.has(body.fileName)) {
+        if (hangingUploadsArrive) fsmAttachments.push({ id: `LATE${fsmAttachments.length}`, fileName: body.fileName, description: body.description });
         return new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
       }
+      fsmAttachments.push({ id: `${ATTACHMENT.slice(0, 28)}${String(fsmAttachments.length).padStart(4, "0")}`, fileName: body.fileName, description: body.description });
       return json({ data: [{ attachment: { id: ATTACHMENT, fileName: body.fileName, type: body.type, object: { objectId: SKILL, objectType: "SKILL" } } }] });
     }
     return json({});
@@ -377,7 +392,7 @@ describe("assign and upload certificates in one step", () => {
     expect(result.assignment.id).toBe(SKILL);
     expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "b.pdf", "c.pdf"]);
     expect(result.failed).toEqual([]);
-    expect(result.unknown).toEqual([]);
+    expect(result.unconfirmed).toEqual([]);
   });
 
   it("keeps the assignment when the 2nd of 3 uploads fails, reports it, and a retry uploads it", async () => {
@@ -402,8 +417,9 @@ describe("assign and upload certificates in one step", () => {
       await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
       const result = await pending;
       expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "c.pdf"]);
-      expect(result.failed).toEqual([]);
-      expect(result.unknown.map((f) => [f.file.name, f.error])).toEqual([["b.pdf", expect.stringContaining("may have been saved")]]);
+      // checked in FSM right away: the fake did not store b.pdf, so it is "not uploaded", with its upload id to recheck before a retry
+      expect(result.failed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+      expect(result.failed[0].uploadId).toMatch(/^[0-9a-f]{32}$/);
     } finally {
       vi.useRealTimers();
     }
@@ -430,5 +446,160 @@ describe("assign and upload certificates in one step", () => {
       path === "skill/v2/skills" && method === "POST" ? { hasErrors: true, results: [{ status: 400, error: { detail: "Simulated create failure" } }] } : null;
     await expect(createAssignmentWithCertificates(OWN_TAG, PERSON, input, files)).rejects.toThrow(/Simulated create failure/);
     expect(steps()).toEqual(["POST skill/v2/skills"]);
+  });
+});
+
+describe("a write FSM did not answer is checked once in FSM, never repeated automatically", () => {
+  const file = (name: string, content = "%PDF-1.4 dummy") => new File([content], name, { type: "application/pdf" });
+  const [a, b] = [file("a.pdf"), file("b.pdf")];
+  const uploads = () => writes().filter((c) => c.path === "data/v4/Attachment").map((c) => (c.body as { fileName: string }).fileName);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    searchAnswer = (path, filter) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search" && filter.some((f) => f.field === "id")) return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
+      return [];
+    };
+    // Like FSM: attachments of the skill, filtered by the upload's id in the description when the query asks for it.
+    queryAnswer = (sql) => {
+      if (!sql.includes("FROM Attachment a WHERE")) return [];
+      const wanted = /a\.description = '([^']*)'/.exec(sql)?.[1];
+      return fsmAttachments
+        .filter((x) => wanted === undefined || x.description === wanted)
+        .map((x) => ({ a: { id: x.id, fileName: x.fileName, type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }));
+    };
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Runs an upload batch through the 60 s timeout of the hanging file. */
+  async function uploadWithTimeout(items: Parameters<typeof uploadCertificates>[1]) {
+    const pending = uploadCertificates(SKILL, items);
+    await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+    return pending;
+  }
+
+  it("every upload carries its own id, so the check finds exactly this upload", async () => {
+    await uploadCertificates(SKILL, [a, b]);
+    const descriptions = writes().map((c) => (c.body as { description?: string }).description);
+    expect(descriptions.every((d) => /^Skill Management upload [0-9a-f]{32}$/.test(d ?? ""))).toBe(true);
+    expect(new Set(descriptions).size).toBe(2);
+  });
+
+  it("upload: FSM has the file after the timeout → uploaded, and it is not sent again", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    hangingUploadsArrive = true;
+    const outcome = await uploadWithTimeout([a, b]);
+    expect(outcome.confirmedLate.map((f) => f.name)).toEqual(["b.pdf"]);
+    expect(outcome.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "b.pdf"]);
+    expect(outcome.failed).toEqual([]);
+    expect(outcome.unconfirmed).toEqual([]);
+    expect(uploads()).toEqual(["a.pdf", "b.pdf"]);
+  });
+
+  it("upload: FSM does not have the file → not uploaded; only the user's retry sends it again", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    const outcome = await uploadWithTimeout([a, b]);
+    expect(outcome.failed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+    expect(outcome.failed[0].error).toMatch(/Not uploaded/);
+    expect(outcome.failed[0].uploadId).toMatch(/^[0-9a-f]{32}$/);
+    expect(uploads()).toEqual(["a.pdf", "b.pdf"]); // nothing repeated by itself
+
+    hangingUploads = new Set();
+    const retry = await uploadCertificates(SKILL, retryItems(outcome.failed));
+    expect(retry.uploaded.map((c) => c.fileName)).toEqual(["b.pdf"]);
+    expect(uploads()).toEqual(["a.pdf", "b.pdf", "b.pdf"]);
+  });
+
+  it("upload: the retry sees a file that arrived late and does not upload it twice", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    const outcome = await uploadWithTimeout([b]);
+    const lost = writes()[0].body as { fileName: string; description: string };
+    fsmAttachments.push({ id: "LATEARRIVAL", fileName: lost.fileName, description: lost.description }); // FSM finished it after all
+
+    hangingUploads = new Set();
+    const retry = await uploadCertificates(SKILL, retryItems(outcome.failed));
+    expect(retry.confirmedLate.map((f) => f.name)).toEqual(["b.pdf"]);
+    expect(uploads()).toEqual(["b.pdf"]); // only the original attempt
+  });
+
+  it("upload: another file with the same name is never taken for the lost one (Codex finding)", async () => {
+    const first = file("scan.pdf", "%PDF-1.4 first");
+    const second = file("scan.pdf", "%PDF-1.4 second");
+    hangingUploads = new Set(["scan.pdf"]);
+    const pending = uploadCertificates(SKILL, [first]);
+    await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+    const outcome = await pending; // the first scan.pdf did not arrive
+    hangingUploads = new Set();
+    await uploadCertificates(SKILL, [second]); // a different scan.pdf arrives
+
+    const retry = await uploadCertificates(SKILL, retryItems(outcome.failed));
+    expect(retry.confirmedLate).toEqual([]); // not falsely "uploaded"
+    expect(retry.uploaded).toHaveLength(1); // the first scan.pdf is sent now
+    expect(uploads()).toEqual(["scan.pdf", "scan.pdf", "scan.pdf"]);
+  });
+
+  it("upload: the check fails → not confirmed; 'Check again' decides without uploading", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    queriesFail = true; // FSM cannot be reached for the check after the timeout
+    const outcome = await uploadWithTimeout([b]);
+    expect(outcome.unconfirmed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+    expect(outcome.failed).toEqual([]);
+
+    queriesFail = false;
+    const again = await recheckUploads(SKILL, outcome.unconfirmed);
+    expect(again.failed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+    expect(again.unconfirmed).toEqual([]);
+    expect(uploads()).toEqual(["b.pdf"]); // still only the original attempt
+  });
+
+  it("a failing query does not stop uploads, so a just-created assignment is never lost (Codex finding)", async () => {
+    queriesFail = true;
+    searchAnswer = (path, filter) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search" && filter.some((f) => f.field === "id")) return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
+      return [];
+    };
+    const result = await createAssignmentWithCertificates(OWN_TAG, PERSON, { startDate: null, endDate: null }, [a]);
+    expect(result.assignment.id).toBe(SKILL);
+    expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf"]);
+  });
+
+  describe("create", () => {
+    let created: boolean;
+    let searchFails: boolean;
+    beforeEach(() => {
+      created = false;
+      searchFails = false;
+      const base = searchAnswer;
+      searchAnswer = (path, filter) => {
+        if (path === "skill/v1/skills/search" && filter.some((f) => f.field === "technicianId")) {
+          if (searchFails) throw new Error("simulated outage");
+          return created ? [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding", technicianId: PERSON }] : [];
+        }
+        return base(path, filter);
+      };
+    });
+
+    it("FSM has the assignment after the timeout → assigned, and it is not created again", async () => {
+      hangingWrite = "skill/v2/skills";
+      const attempt = createAssignmentWithCertificates(OWN_TAG, PERSON, { startDate: null, endDate: null }, []).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+      expect(await attempt).toBeInstanceOf(FsmTimeoutError);
+      created = true; // the create arrived, only the answer was lost
+      await expect(checkAssignmentCreated(OWN_TAG, PERSON)).resolves.toMatchObject({ result: "done", value: { id: SKILL } });
+      expect(writes().filter((c) => c.path === "skill/v2/skills")).toHaveLength(1);
+    });
+
+    it("FSM does not have it → not assigned (the user may try again)", async () => {
+      await expect(checkAssignmentCreated(OWN_TAG, PERSON)).resolves.toEqual({ result: "notDone" });
+      expect(writes()).toEqual([]);
+    });
+
+    it("the check fails → not confirmed", async () => {
+      searchFails = true;
+      await expect(checkAssignmentCreated(OWN_TAG, PERSON)).resolves.toMatchObject({ result: "unconfirmed" });
+      expect(writes()).toEqual([]);
+    });
   });
 });

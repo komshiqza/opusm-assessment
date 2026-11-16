@@ -7,11 +7,13 @@ import { useToday } from "@/hooks/useToday";
 import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
 import {
+  checkAssignmentCreated,
   createAssignmentWithCertificates,
   deleteAssignment,
+  recheckUploads,
+  retryItems,
   updateAssignment,
   uploadCertificates,
-  type UploadOutcome,
 } from "@/lib/skills/repository";
 import { toUserMessage } from "@/lib/errors";
 import { FsmTimeoutError } from "@/lib/fsm/client";
@@ -23,6 +25,8 @@ import { useToast } from "@/components/common/Toast";
 import { STATUS_DISPLAY, statusText } from "@/components/matrix/statusDisplay";
 import { CertificateSection } from "./CertificateSection";
 import { closeAfterRefresh, initialLevelId, levelChoices, levelToSend, primaryAction } from "./assignmentDialogState";
+import { EMPTY_RESULTS, applyOutcome, type UploadResults } from "./uploadResults";
+import { UploadResultNotes } from "./UploadResultNotes";
 import styles from "./AssignmentDialog.module.css";
 
 interface AssignmentDialogProps {
@@ -65,10 +69,14 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pickProblems, setPickProblems] = useState<string[]>([]);
   const [pickerKey, setPickerKey] = useState(0);
-  /** Files FSM did not accept during save or retry; they stay listed until uploaded or dismissed. */
-  const [failed, setFailed] = useState<UploadOutcome["failed"]>([]);
-  /** Files FSM did not answer for in time: maybe uploaded. Shown, never retried blindly. */
-  const [unknownFiles, setUnknownFiles] = useState<UploadOutcome["unknown"]>([]);
+  /** Upload results of save and retry: confirmed late, not uploaded (Try again), not confirmed (Check again). */
+  const [uploadResults, setUploadResults] = useState<UploadResults>(EMPTY_RESULTS);
+  const { failed } = uploadResults;
+  /**
+   * A create FSM answered too late for, and what the check in FSM found: "done" (it is there),
+   * "notDone" (it is not: Assign may be used again), "unconfirmed" (only Check again).
+   */
+  const [createCheck, setCreateCheck] = useState<{ result: "done" | "notDone" | "unconfirmed"; error?: string } | null>(null);
   /** Id of the assignment this dialog just created; retry must not depend on a successful reload. */
   const [createdId, setCreatedId] = useState<string | null>(null);
   const assignmentId = assignment?.id ?? createdId;
@@ -77,7 +85,13 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
    * `close`: the dialog closes once the list is refreshed (the save itself is done).
    */
   const [notRefreshed, setNotRefreshed] = useState<{ done: string; close: boolean } | null>(null);
-  const action = primaryAction({ listed: Boolean(listedAssignment), createdId, removed, savedWaitingForRefresh: notRefreshed?.close });
+  const action = primaryAction({
+    listed: Boolean(listedAssignment),
+    createdId,
+    removed,
+    savedWaitingForRefresh: notRefreshed?.close,
+    createUnconfirmed: createCheck?.result === "unconfirmed",
+  });
   /** Certificate uploads running: the assignment must not be removed or the dialog closed meanwhile. */
   const [uploading, setUploading] = useState(false);
   /** Picked files are being checked (first bytes): Save must wait, or they would be left out. */
@@ -124,10 +138,9 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
         const outcome = pendingFiles.length ? await uploadCertificates(assignment.id, pendingFiles, showProgress) : null;
         if (outcome) {
           setPendingFiles([]);
-          setFailed(outcome.failed);
-          setUnknownFiles((current) => [...current, ...outcome.unknown]);
+          setUploadResults((current) => applyOutcome(current, outcome, null));
         }
-        const allUploaded = !outcome || (outcome.failed.length === 0 && outcome.unknown.length === 0);
+        const allUploaded = !outcome || (outcome.failed.length === 0 && outcome.unconfirmed.length === 0);
         setProgress("Refreshing…");
         if (!(await state.reload())) {
           setNotRefreshed({ done: "The assignment is saved", close: allUploaded });
@@ -138,41 +151,82 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
         onClose();
         return;
       }
+      // An earlier create timed out and was not in FSM: make sure it did not arrive late before creating again.
+      if (createCheck?.result === "notDone" && (await checkCreate())) return;
       setProgress("Assigning…");
-      const result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress);
+      let result: Awaited<ReturnType<typeof createAssignmentWithCertificates>>;
+      try {
+        result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress);
+      } catch (e) {
+        // FSM did not answer the create: look once whether it arrived. Never created again by itself.
+        if (e instanceof FsmTimeoutError && e.write) {
+          await checkCreate();
+          return;
+        }
+        throw e;
+      }
+      setCreateCheck(null);
       setCreatedId(result.assignment.id);
       setPendingFiles([]);
+      setUploadResults((current) => applyOutcome(current, result, null));
       setProgress("Refreshing…");
       const refreshed = await state.reload();
       const count = result.uploaded.length;
-      const allUploaded = result.failed.length === 0 && result.unknown.length === 0;
-      setUnknownFiles(result.unknown);
+      const allUploaded = result.failed.length === 0 && result.unconfirmed.length === 0;
       if (!refreshed) setNotRefreshed({ done: "The skill is assigned", close: allUploaded });
       if (allUploaded && refreshed) {
         toast(`${definition.name} assigned to ${person.name}${count ? ` with ${count} certificate${count > 1 ? "s" : ""}` : ""}`);
         onClose();
-        return;
       }
-      // The assignment exists now; the dialog stays open with the files that still need uploading.
-      setFailed(result.failed);
+      // Otherwise the assignment exists and the dialog stays open with the files that still need attention.
     });
 
+  /**
+   * After a create FSM answered too late for: one read-only look in FSM. Returns true when the create
+   * is settled for now (it is there, or the check could not tell), false when it is not in FSM.
+   */
+  const checkCreate = async (): Promise<boolean> => {
+    setProgress("FSM did not answer in time. Checking in FSM whether the skill was assigned…");
+    const check = await checkAssignmentCreated(definition.id, person.id);
+    if (check.result === "notDone") {
+      setCreateCheck({ result: "notDone" });
+      return false;
+    }
+    if (check.result === "unconfirmed") {
+      setCreateCheck({ result: "unconfirmed", error: check.error });
+      return true;
+    }
+    setCreatedId(check.value.id);
+    setCreateCheck({ result: "done" });
+    setProgress("Refreshing…");
+    if (!(await state.reload())) setNotRefreshed({ done: "The skill is assigned", close: pendingFiles.length === 0 });
+    return true;
+  };
+
+  const checkCreateAgain = () => runLocked(async () => void (await checkCreate()));
+
+  /** Try again for the files that are not in FSM; a timed-out one is checked first, never sent twice. */
   const retryFailed = () =>
     runLocked(async () => {
       if (!assignmentId) return;
-      const outcome = await uploadCertificates(
-        assignmentId,
-        failed.map((f) => f.file),
-        showProgress,
-      );
-      setFailed(outcome.failed);
-      setUnknownFiles((current) => [...current, ...outcome.unknown]);
+      const outcome = await uploadCertificates(assignmentId, retryItems(failed), showProgress);
+      setUploadResults((current) => applyOutcome(current, outcome, "failed"));
       setProgress("Refreshing…");
       if (!(await state.reload())) {
         setNotRefreshed({ done: outcome.uploaded.length ? "The certificates are uploaded" : "The upload is finished", close: false });
         return;
       }
-      if (outcome.failed.length === 0 && outcome.unknown.length === 0) toast("All certificates uploaded");
+      if (outcome.failed.length === 0 && outcome.unconfirmed.length === 0) toast("All certificates uploaded");
+    });
+
+  /** Check again for uploads that could not be confirmed. Reads only. */
+  const checkUploadsAgain = () =>
+    runLocked(async () => {
+      if (!assignmentId) return;
+      setProgress("Checking in FSM…");
+      const outcome = await recheckUploads(assignmentId, uploadResults.unconfirmed);
+      setUploadResults((current) => applyOutcome(current, outcome, "unconfirmed"));
+      if (outcome.uploaded.length && !(await state.reload())) setNotRefreshed({ done: "The certificates are uploaded", close: false });
     });
 
   /** Retries the reload after a write; closes the dialog when the write was the last step. */
@@ -348,29 +402,34 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
               </MessageStrip>
             )}
 
-            {unknownFiles.length > 0 && (
-              <MessageStrip design="Critical" onClose={() => setUnknownFiles([])}>
-                FSM did not answer in time for {unknownFiles.map((f) => f.file.name).join(", ")}. The file may be uploaded or not: check the
-                certificates once the list is refreshed, and upload it again only if it is missing.
+            {createCheck?.result === "done" && (
+              <MessageStrip design="Positive" onClose={() => setCreateCheck(null)}>
+                Assigned ✓ FSM answered too late, but the app checked: {person.name} has {definition.name} in FSM.
               </MessageStrip>
             )}
-            {failed.length > 0 && (
-              <MessageStrip design="Negative" onClose={() => setFailed([])}>
-                The skill is assigned
-                {certificates.length ? ` and ${certificates.length} certificate${certificates.length > 1 ? "s are" : " is"} uploaded` : ""}.{" "}
-                {failed.length === 1 ? "This file was not uploaded:" : `These ${failed.length} files were not uploaded:`}
-                <ul className={styles.errorList}>
-                  {failed.map((f, i) => (
-                    <li key={i}>
-                      {f.file.name}: {f.error}
-                    </li>
-                  ))}
-                </ul>
-                <Button icon="refresh" onClick={retryFailed} disabled={locked}>
-                  Retry failed uploads
+            {createCheck?.result === "notDone" && (
+              <MessageStrip design="Negative" hideCloseButton>
+                Not assigned. FSM did not answer in time, and the app checked: {person.name} does not have {definition.name} in FSM. You can try
+                again.
+              </MessageStrip>
+            )}
+            {createCheck?.result === "unconfirmed" && (
+              <MessageStrip design="Critical" hideCloseButton>
+                Not confirmed yet: FSM did not answer in time, and the check could not tell whether the skill was assigned ({createCheck.error}).
+                Nothing is sent again until this is clear.{" "}
+                <Button icon="refresh" onClick={checkCreateAgain} disabled={locked}>
+                  Check again
                 </Button>
               </MessageStrip>
             )}
+            <UploadResultNotes
+              results={uploadResults}
+              onChange={setUploadResults}
+              onRetry={retryFailed}
+              onCheckAgain={checkUploadsAgain}
+              locked={locked}
+              failedIntro={createdId ? "The skill is assigned. " : null}
+            />
 
             {!removed && assignment && pendingFiles.length > 0 && (
               <MessageStrip design="Information" hideCloseButton>

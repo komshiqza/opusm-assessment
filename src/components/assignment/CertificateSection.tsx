@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BusyIndicator, Button, FileUploader, Icon, Link, MessageStrip, Text, Title } from "@ui5/webcomponents-react";
-import { deleteCertificate, uploadCertificates } from "@/lib/skills/repository";
+import { deleteCertificate, recheckUploads, retryItems, uploadCertificates, type UploadItem, type UploadOutcome } from "@/lib/skills/repository";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
@@ -11,6 +11,8 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useToast } from "@/components/common/Toast";
 import { CertificatePreview } from "./CertificatePreview";
 import { saveCertificate } from "./saveCertificate";
+import { EMPTY_RESULTS, applyOutcome, type UploadResults } from "./uploadResults";
+import { UploadResultNotes } from "./UploadResultNotes";
 import styles from "./AssignmentDialog.module.css";
 
 interface CertificateSectionProps {
@@ -36,15 +38,17 @@ const TYPE_ICON: Record<string, string> = {
 export function CertificateSection({ assignmentId, certificates, onChanged, onRefreshFailed, onBusyChange, operationRef, locked }: CertificateSectionProps) {
   const toast = useToast();
   const [progress, setProgress] = useState<string | null>(null);
+  /** Picked files the app refused (type, size) and errors that stopped an upload. */
   const [errors, setErrors] = useState<string[]>([]);
-  /** Files FSM did not answer for in time: maybe uploaded, so the user checks the list first. */
-  const [unknownNames, setUnknownNames] = useState<string[]>([]);
+  /** Upload results: confirmed late, not uploaded (Try again), not confirmed (Check again). */
+  const [results, setResults] = useState<UploadResults>(EMPTY_RESULTS);
   const [toDelete, setToDelete] = useState<Certificate | null>(null);
   const [previewed, setPreviewed] = useState<Certificate | null>(null);
   /** Remounts the file input so the same file can be picked again. */
   const [inputKey, setInputKey] = useState(0);
 
-  const upload = async (files: File[]) => {
+  /** Runs one upload, retry or check under the dialog's lock, then shows what FSM has now. */
+  const runUpload = async (work: () => Promise<{ outcome: UploadOutcome; rerun: "failed" | "unconfirmed" | null; problems?: string[] }>) => {
     // Busy from the first moment (also while the files are checked), so nothing else can start.
     if (operationRef.current) {
       setInputKey((k) => k + 1);
@@ -52,20 +56,16 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
     }
     operationRef.current = true;
     onBusyChange(true);
-    setProgress("Checking files…");
     try {
-      const { valid, problems } = await splitCertificateFiles(files);
-      const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) =>
-        setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`),
-      );
-      setErrors([...problems, ...outcome.failed.map((f) => `${f.file.name}: ${f.error}`)]);
-      setUnknownNames(outcome.unknown.map((f) => f.file.name));
+      const { outcome, rerun, problems = [] } = await work();
+      setErrors(problems);
+      setResults((current) => applyOutcome(current, outcome, rerun));
       const uploaded = outcome.uploaded.length;
-      if (uploaded || outcome.unknown.length) {
+      if (uploaded) {
         setProgress("Refreshing…");
-        const what = uploaded ? `${uploaded} certificate${uploaded > 1 ? "s" : ""} uploaded` : "The upload is finished";
-        if (!(await onChanged())) onRefreshFailed(what.charAt(0).toUpperCase() + what.slice(1));
-        else if (uploaded) toast(what);
+        const what = `${uploaded} certificate${uploaded > 1 ? "s" : ""} uploaded`;
+        if (await onChanged()) toast(what);
+        else onRefreshFailed(what.charAt(0).toUpperCase() + what.slice(1));
       }
     } catch (e) {
       setErrors([toUserMessage(e)]);
@@ -76,6 +76,28 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
       onBusyChange(false);
     }
   };
+
+  const showProgress = (file: File, i: number, total: number) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`);
+
+  const send = (items: UploadItem[], rerun: "failed" | null, problems: string[] = []) =>
+    uploadCertificates(assignmentId, items, showProgress).then((outcome) => ({ outcome, rerun, problems }));
+
+  const upload = (files: File[]) =>
+    runUpload(async () => {
+      setProgress("Checking files…");
+      const { valid, problems } = await splitCertificateFiles(files);
+      return send(valid, null, problems);
+    });
+
+  /** Try again for files that are not in FSM; a timed-out one is checked first, never sent twice. */
+  const retry = () => runUpload(() => send(retryItems(results.failed), "failed"));
+
+  /** Check again for uploads that could not be confirmed. Reads only. */
+  const checkAgain = () =>
+    runUpload(async () => {
+      setProgress("Checking in FSM…");
+      return { outcome: await recheckUploads(assignmentId, results.unconfirmed), rerun: "unconfirmed" };
+    });
 
   return (
     <section className={styles.certificates} aria-labelledby="certificates-title">
@@ -136,12 +158,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onRe
         <Text className={styles.muted}>{progress ?? `PDF, JPG or PNG, max. ${MAX_CERTIFICATE_LABEL} each`}</Text>
       </div>
 
-      {unknownNames.length > 0 && (
-        <MessageStrip design="Critical" onClose={() => setUnknownNames([])}>
-          FSM did not answer in time for {unknownNames.join(", ")}. The file may be uploaded or not: check the list above, and upload it again
-          only if it is missing.
-        </MessageStrip>
-      )}
+      <UploadResultNotes results={results} onChange={setResults} onRetry={retry} onCheckAgain={checkAgain} locked={locked || progress !== null} />
       {errors.length > 0 && (
         <MessageStrip design="Negative" onClose={() => setErrors([])}>
           {errors.length === 1 ? (

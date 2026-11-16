@@ -7,6 +7,7 @@ export function primaryAction({
   createdId,
   removed,
   savedWaitingForRefresh = false,
+  createUnconfirmed = false,
 }: {
   /** the loaded list shows this assignment */
   listed: boolean;
@@ -16,8 +17,11 @@ export function primaryAction({
   removed: boolean;
   /** a save is done and the dialog closes once the list is refreshed: editing more would be lost */
   savedWaitingForRefresh?: boolean;
+  /** a create FSM answered too late for, and the check could not tell whether it arrived */
+  createUnconfirmed?: boolean;
 }): "assign" | "save" | "none" {
   if (removed || savedWaitingForRefresh) return "none";
+  if (!listed && createUnconfirmed) return "none";
   if (listed) return "save";
   return createdId ? "none" : "assign";
 }
