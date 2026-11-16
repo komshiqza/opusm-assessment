@@ -2,14 +2,14 @@
  * All FSM access of the app. UI components never call the FSM client directly.
  *
  * Which API for what (details in README.md):
- * - Query API:     persons, certificates (one query for many skills), ownership lookups before writes
+ * - Query API:     persons, certificates (one query for many skills)
  * - Skill Service: tags (incl. scaleId), skills (incl. proficiency), scales and levels; tag and skill writes
  * - Data API:      attachments (upload, download, delete); the only API that handles files
  *
  * Every write first re-reads its target from FSM and passes it through the guard in
  * `src/lib/fsm/guard.ts`. If the check fails, the write request is never sent.
  */
-import { assertBulkOk, fileToBase64, fsmCreate, fsmDelete, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
+import { assertBulkOk, fileToBase64, fsmCreate, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
@@ -115,38 +115,33 @@ async function loadLevels(scaleId: string) {
 }
 
 // --- Ownership lookups (fresh from FSM, right before a write) ---------------------------
+// Tags and Skills are read from the Skill Service, Attachments from the Data API: both answer
+// immediately after a write. The Query API shows Skills and Tags written through the Skill
+// Service only 1-3 seconds later, so it is not used here.
 
-async function readTagName(tagId: string): Promise<string | null> {
+async function assertOwnTag(tagId: string): Promise<void> {
   assertFsmId(tagId);
-  const rows = await fsmQuery<{ t: { name: string } }>(`SELECT t.id, t.name FROM Tag t WHERE t.id = '${tagId}'`, ["Tag"]);
-  return rows[0]?.t.name ?? null;
-}
-
-async function assertOwnTag(tagId: string): Promise<string> {
-  const name = await readTagName(tagId);
-  if (name === null) throw new OwnershipError("Refused: this skill no longer exists in FSM. Reload the page.");
-  assertOwnName(name, "Tag");
-  return name;
+  const tags = await skillSearch<SkillServiceTag>("v1/tags", [{ field: "id", operator: "=", value: tagId }]);
+  const tag = tags.find((t) => t.id === tagId && !t.deleted);
+  if (!tag) throw new OwnershipError("Refused: this skill no longer exists in FSM. Reload the page.");
+  assertOwnName(tag.name, "Tag");
 }
 
 async function assertOwnSkill(skillId: string): Promise<{ tagId: string }> {
   assertFsmId(skillId);
-  const rows = await fsmQuery<{ s: { tag: string }; t: { name: string } }>(
-    `SELECT s.id, s.tag, t.name FROM Skill s JOIN Tag t ON t.id = s.tag WHERE s.id = '${skillId}'`,
-    ["Skill", "Tag"],
-  );
-  const row = rows[0];
-  assertOwnedByTagName(row ? { tagName: row.t.name } : null, "Skill");
-  return { tagId: row!.s.tag };
+  const skills = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [{ field: "id", operator: "=", value: skillId }]);
+  const skill = skills.find((s) => s.id === skillId && !s.deleted) ?? null;
+  assertOwnedByTagName(skill, "Skill");
+  return { tagId: skill!.tagId };
 }
 
 async function assertOwnAttachment(attachmentId: string): Promise<void> {
   assertFsmId(attachmentId);
-  const rows = await fsmQuery<{ t: { name: string } }>(
-    `SELECT a.id, t.name FROM Attachment a JOIN Skill s ON s.id = a.object.objectId JOIN Tag t ON t.id = s.tag WHERE a.id = '${attachmentId}' AND a.object.objectType = 'SKILL'`,
-    ["Attachment", "Skill", "Tag"],
-  );
-  assertOwnedByTagName(rows[0] ? { tagName: rows[0].t.name } : null, "Attachment");
+  const attachment = await fsmGet<FsmAttachment>("Attachment", attachmentId);
+  if (!attachment || attachment.object?.objectType !== "SKILL") {
+    throw new OwnershipError("Refused: the certificate was not found or is not attached to a skill.");
+  }
+  await assertOwnSkill(attachment.object.objectId);
 }
 
 // --- Writes: scale -------------------------------------------------------------------

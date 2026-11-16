@@ -36,7 +36,8 @@ interface Call {
 let calls: Call[];
 /** Fake FSM: answers a query by looking at the SQL; everything else via `writeAnswers`. */
 let queryAnswer: (sql: string) => unknown[];
-let searchAnswer: (path: string) => unknown[];
+let searchAnswer: (path: string, filter: { field: string; value: unknown }[]) => unknown[];
+let attachmentAnswer: unknown = null;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -46,6 +47,7 @@ beforeEach(() => {
   calls = [];
   queryAnswer = () => [];
   searchAnswer = () => [];
+  attachmentAnswer = null;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input, "http://localhost");
     const method = (init.method ?? "GET").toUpperCase();
@@ -54,7 +56,10 @@ beforeEach(() => {
     calls.push({ method, path, body });
 
     if (path === "query/v1") return json({ data: queryAnswer(body.query), lastPage: 1 });
-    if (path.endsWith("/search")) return json({ content: searchAnswer(path), last: true, totalElements: 0 });
+    if (path.endsWith("/search")) return json({ content: searchAnswer(path, body.filter ?? []), last: true, totalElements: 0 });
+    if (path.startsWith("data/v4/Attachment/") && method === "GET") {
+      return attachmentAnswer ? json({ data: [{ attachment: attachmentAnswer }] }) : json({ error: "not found" }, 404);
+    }
     if (path === "skill/v1/scales" && method === "POST") return json("EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE");
     if (path.startsWith("skill/v2/")) return json({ hasErrors: false, results: [{ status: 200, resource: { id: SKILL, ...body?.[0] } }] }, 207);
     if (path.startsWith("data/v4/Attachment") && method === "POST") {
@@ -71,47 +76,51 @@ function writes() {
   return calls.filter((c) => c.method !== "GET" && c.path !== "query/v1" && !c.path.endsWith("/search"));
 }
 
-const tagNamed = (name: string) => (sql: string) => (sql.includes("FROM Tag t WHERE") ? [{ t: { id: DEMO_TAG, name } }] : []);
-const skillOfTag = (name: string) => (sql: string) =>
-  sql.includes("FROM Skill s JOIN Tag") ? [{ s: { id: SKILL, tag: OWN_TAG }, t: { name } }] : [];
+/** Skill Service answers for the ownership lookups (tag by id, skill by id). */
+const tagNamed = (name: string) => (path: string) => (path === "skill/v1/tags/search" ? [{ id: DEMO_TAG, name }] : []);
+const skillOfTag = (name: string) => (path: string) =>
+  path === "skill/v1/skills/search" ? [{ id: SKILL, tagId: OWN_TAG, tagName: name, technicianId: PERSON }] : [];
 const pdf = () => new File(["%PDF-1.4 dummy"], "cert.pdf", { type: "application/pdf" });
 
 describe("guard refuses writes to data that is not ours (and sends nothing)", () => {
   it.each(["Gasnetz-Anschluss", "jdoe::Welding"])("delete skill definition %j", async (name) => {
-    queryAnswer = tagNamed(name);
+    searchAnswer = tagNamed(name);
     await expect(deleteSkillDefinition(DEMO_TAG)).rejects.toThrow(OwnershipError);
     expect(writes()).toEqual([]);
   });
 
   it("rename a demo tag", async () => {
-    queryAnswer = tagNamed("Hydraulik");
+    searchAnswer = tagNamed("Hydraulik");
     await expect(updateSkillDefinition(DEMO_TAG, "Hydraulik 2", "")).rejects.toThrow(OwnershipError);
     expect(writes()).toEqual([]);
   });
 
   it("assign a demo tag to a person", async () => {
-    queryAnswer = tagNamed("Hydraulik");
+    searchAnswer = tagNamed("Hydraulik");
     await expect(createAssignment(DEMO_TAG, PERSON, { startDate: null, endDate: null, proficiencyId: null })).rejects.toThrow(OwnershipError);
     expect(writes()).toEqual([]);
   });
 
   it("edit or remove a skill of a demo tag", async () => {
-    queryAnswer = skillOfTag("Hydraulik");
+    searchAnswer = skillOfTag("Hydraulik");
     await expect(updateAssignment(SKILL, { startDate: null, endDate: "2027-01-01", proficiencyId: null })).rejects.toThrow(OwnershipError);
     await expect(deleteAssignment(SKILL)).rejects.toThrow(OwnershipError);
     expect(writes()).toEqual([]);
   });
 
   it("upload a certificate to a skill of another candidate", async () => {
-    queryAnswer = skillOfTag("jdoe::Welding");
+    searchAnswer = skillOfTag("jdoe::Welding");
     await expect(uploadCertificate(SKILL, pdf())).rejects.toThrow(OwnershipError);
     expect(writes()).toEqual([]);
   });
 
   it("delete an attachment that is not on one of our skills", async () => {
-    queryAnswer = () => []; // join finds nothing: not a SKILL attachment, or not found
+    attachmentAnswer = null; // not found
     await expect(deleteCertificate(ATTACHMENT)).rejects.toThrow(OwnershipError);
-    queryAnswer = (sql) => (sql.includes("FROM Attachment a JOIN") ? [{ t: { name: "Hydraulik" } }] : []);
+    attachmentAnswer = { id: ATTACHMENT, object: { objectId: PERSON, objectType: "PERSON" } }; // not on a skill
+    await expect(deleteCertificate(ATTACHMENT)).rejects.toThrow(OwnershipError);
+    attachmentAnswer = { id: ATTACHMENT, object: { objectId: SKILL, objectType: "SKILL" } };
+    searchAnswer = skillOfTag("Hydraulik"); // on a skill of a demo tag
     await expect(deleteCertificate(ATTACHMENT)).rejects.toThrow(OwnershipError);
     expect(writes()).toEqual([]);
   });
@@ -124,12 +133,13 @@ describe("guard refuses writes to data that is not ours (and sends nothing)", ()
 
 describe("own data", () => {
   it("deletes a skill definition in the order certificates → assignments → tag", async () => {
-    queryAnswer = (sql) => {
-      if (sql.includes("FROM Tag t WHERE")) return [{ t: { id: OWN_TAG, name: "komshiqza::Welding" } }];
-      if (sql.includes("FROM Attachment a WHERE")) return [{ a: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }];
+    queryAnswer = (sql) =>
+      sql.includes("FROM Attachment a WHERE") ? [{ a: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] : [];
+    searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
       return [];
     };
-    searchAnswer = (path) => (path === "skill/v1/skills/search" ? [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }] : []);
 
     await expect(deleteSkillDefinition(OWN_TAG)).resolves.toEqual({ assignments: 1, certificates: 1 });
     expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([
@@ -139,8 +149,15 @@ describe("own data", () => {
     ]);
   });
 
+  it("deletes an own certificate with exactly one request", async () => {
+    attachmentAnswer = { id: ATTACHMENT, object: { objectId: SKILL, objectType: "SKILL" } };
+    searchAnswer = skillOfTag("komshiqza::Welding");
+    await deleteCertificate(ATTACHMENT);
+    expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([`DELETE data/v4/Attachment/${ATTACHMENT}`]);
+  });
+
   it("uploads a certificate to an own skill", async () => {
-    queryAnswer = skillOfTag("komshiqza::Welding");
+    searchAnswer = skillOfTag("komshiqza::Welding");
     await uploadCertificate(SKILL, pdf());
     const [upload] = writes();
     expect(upload).toMatchObject({ method: "POST", path: "data/v4/Attachment", body: { type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } });

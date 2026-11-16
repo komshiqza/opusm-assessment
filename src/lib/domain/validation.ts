@@ -21,8 +21,8 @@ function isValidIsoDate(value: string): boolean {
 }
 
 export function validateValidity(from: string | null, to: string | null): string | null {
-  if (from && !isValidIsoDate(from)) return "“Valid from” is not a valid date.";
-  if (to && !isValidIsoDate(to)) return "“Valid to” is not a valid date.";
+  if (from && !isValidIsoDate(from)) return "“Valid from” is not a valid date. Use the format DD.MM.YYYY.";
+  if (to && !isValidIsoDate(to)) return "“Valid to” is not a valid date. Use the format DD.MM.YYYY.";
   if (to === OPEN_END_DATE) return "9999-12-31 is reserved for “no end date”. Leave “Valid to” empty instead.";
   if (from && to && to < from) return "“Valid to” must not be before “Valid from”.";
   return null;

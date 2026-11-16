@@ -18,3 +18,9 @@ body {
   color: var(--sapTextColor);
   font-family: var(--sapFontFamily);
 }
+
+/* ui5-busy-indicator lays out its content as a centred flex row; let wrapped content use the full width. */
+ui5-busy-indicator > :not([slot]) {
+  flex: 1 1 auto;
+  min-width: 0;
+}

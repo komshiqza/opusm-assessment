@@ -14,7 +14,7 @@ describe("getAssignmentStatus", () => {
     ["2026-11-16", "expiring", "ends today (still valid until end of day)"],
     ["2026-11-15", "expired", "ended yesterday"],
     ["2020-01-01", "expired", "long ago"],
-  ] as const)("endDate %s → %s (%s)", (endDate, expected) => {
+  ] as const)("endDate %s → %s (%s)", (endDate, expected, _why) => {
     expect(getAssignmentStatus({ endDate }, TODAY)).toBe(expected);
   });
 

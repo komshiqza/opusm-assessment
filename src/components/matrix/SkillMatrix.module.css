@@ -1,0 +1,234 @@
+.wrapper {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 14rem;
+  max-width: 22rem;
+}
+
+.field > :last-child {
+  width: 100%;
+}
+
+.reset {
+  align-self: flex-end;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  font-size: var(--sapFontSize);
+}
+
+.summaryChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 1rem;
+  background: none;
+  font: inherit;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.summaryChip:hover,
+.summaryChip[aria-pressed="true"] {
+  border-color: currentColor;
+  background: var(--sapList_Hover_Background);
+}
+
+.summaryChip:focus-visible,
+.cellButton:focus-visible {
+  outline: var(--sapContent_FocusWidth) var(--sapContent_FocusStyle) var(--sapContent_FocusColor);
+  outline-offset: -2px;
+}
+
+.chipIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--sapContent_LabelColor);
+  font-size: var(--sapFontSmallSize);
+}
+
+/* Scrolls in both directions; header row and person column stay visible. */
+.scroller {
+  overflow: auto;
+  max-height: calc(100vh - 17rem);
+  min-height: 12rem;
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: var(--sapElement_BorderCornerRadius);
+  background: var(--sapList_Background);
+}
+
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--sapList_BorderColor);
+  border-right: 1px solid var(--sapList_BorderColor);
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--sapList_HeaderBackground);
+  color: var(--sapList_HeaderTextColor);
+  font-weight: bold;
+  font-size: var(--sapFontSize);
+  text-align: left;
+  vertical-align: bottom;
+  padding: 0.5rem;
+}
+
+.corner {
+  left: 0;
+  z-index: 3 !important;
+  min-width: 13rem;
+}
+
+.skillHeader {
+  width: 9.5rem;
+  min-width: 9.5rem;
+  max-width: 9.5rem;
+  overflow-wrap: anywhere;
+}
+
+.personCell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--sapList_Background);
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+  font-weight: normal;
+  min-width: 13rem;
+  max-width: 16rem;
+}
+
+.personName {
+  display: block;
+  font-weight: bold;
+  color: var(--sapTextColor);
+}
+
+.personMeta {
+  display: block;
+  font-size: var(--sapFontSmallSize);
+  color: var(--sapContent_LabelColor);
+}
+
+.table tbody tr:hover .personCell,
+.table tbody tr:hover .cell {
+  background: var(--sapList_Hover_Background);
+}
+
+.cell {
+  padding: 0;
+  background: var(--sapList_Background);
+}
+
+.cell[data-status="expiring"] {
+  box-shadow: inset 3px 0 0 var(--sapCriticalColor);
+}
+
+.cell[data-status="expired"] {
+  box-shadow: inset 3px 0 0 var(--sapNegativeColor);
+}
+
+.cell[data-status="valid"] {
+  box-shadow: inset 3px 0 0 var(--sapPositiveColor);
+}
+
+.cellButton {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--sapFontSmallSize);
+  color: var(--sapTextColor);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cellStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: bold;
+}
+
+.cellMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.25rem;
+  color: var(--sapContent_LabelColor);
+}
+
+.cert {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  color: var(--sapTextColor);
+  font-weight: bold;
+}
+
+.cellIcon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  color: var(--sapContent_LabelColor);
+}
+
+.assignHint {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--sapLinkColor);
+}
+
+.cellButton:hover .empty > :first-child,
+.cellButton:focus-visible .empty > :first-child {
+  display: none;
+}
+
+.cellButton:hover .assignHint,
+.cellButton:focus-visible .assignHint {
+  display: inline-flex;
+}

@@ -1,8 +1,5 @@
-import { StarterPage } from "@/components/StarterPage";
+import { SkillManagementApp } from "@/components/SkillManagementApp";
 
-/**
- * Entry point. Replace <StarterPage /> with your skill management app.
- */
 export default function Home() {
-  return <StarterPage />;
+  return <SkillManagementApp />;
 }
