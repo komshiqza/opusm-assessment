@@ -42,3 +42,9 @@ export function personSkillRows<D extends { id: string }>(
   });
   return [...rows.filter((r) => r.assignment), ...rows.filter((r) => !r.assignment)];
 }
+
+/** "1 of 5 skills assigned": distinct skills, so a skill held by two records counts once. */
+export function personSkillSummary<D extends { id: string }>(rows: PersonSkillRow<D>[]): { held: number; total: number } {
+  const held = new Set(rows.filter((r) => r.assignment).map((r) => r.definition.id));
+  return { held: held.size, total: new Set(rows.map((r) => r.definition.id)).size };
+}

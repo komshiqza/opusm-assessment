@@ -6,7 +6,7 @@ import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { formatPersonType } from "@/lib/format";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { PersonSkills } from "./PersonSkills";
-import { personSkillRows } from "./personSkillRows";
+import { personSkillRows, personSkillSummary } from "./personSkillRows";
 import styles from "./PersonSkills.module.css";
 import { t } from "@/lib/i18n/t";
 
@@ -30,7 +30,7 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
     state.certificatesBySkill,
     today,
   );
-  const held = rows.filter((r) => r.assignment).length;
+  const { held, total } = personSkillSummary(rows);
 
   return (
     <Dialog
@@ -52,7 +52,7 @@ export function PersonDialog({ person, records = [person], state, onOpenCell, on
       <div className={styles.summary}>
         <Text>{[person.jobTitle, formatPersonType(person.type)].filter(Boolean).join(" · ") || " "}</Text>
         <Text className={styles.muted}>
-          {t("personView.summary", { held, total: rows.length })}
+          {t("personView.summary", { held, total })}
         </Text>
       </div>
       <PersonSkills

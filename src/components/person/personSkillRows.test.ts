@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { personSkillRows } from "./personSkillRows";
+import { personSkillRows, personSkillSummary } from "./personSkillRows";
 
 const TODAY = "2026-11-16";
 const definitions = [
@@ -74,5 +74,14 @@ describe("personSkillRows across a person's records (opened from Find technician
       ["annaU", "expired", []],
       ["annaE", "valid", ["weld.pdf"]],
     ]);
+  });
+
+  it("counts skills, not rows, in the summary (a skill on two records is one skill)", () => {
+    const both: Record<string, ReturnType<typeof assignment>> = {
+      "annaU|WELD": assignment("S3", "WELD", "2026-01-01"),
+      "annaE|WELD": assignment("S1", "WELD", "2027-06-01"),
+    };
+    const rows = personSkillRows(["annaU", "annaE"], definitions, (p, t) => both[`${p}|${t}`], certificates, TODAY);
+    expect(personSkillSummary(rows)).toEqual({ held: 1, total: 3 });
   });
 });

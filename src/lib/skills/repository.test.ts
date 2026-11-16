@@ -243,6 +243,27 @@ describe("own data", () => {
     await expect(removal).rejects.toThrow(/Second assignment failed.*1 certificate was uploaded while this was being removed/);
   });
 
+  it("does not call a late certificate on an assignment that was not deleted 'left behind' (it can still be deleted)", async () => {
+    const SECOND = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+    fsm.searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [SKILL, SECOND].map((id) => ({ id, tagId: OWN_TAG, tagName: "komshiqza::Welding" }));
+      return [];
+    };
+    let deleteSent = false;
+    fsm.bulkAnswer = (path, method) => {
+      if (path !== "skill/v2/skills" || method !== "DELETE") return null;
+      deleteSent = true;
+      return { hasErrors: true, results: [{ status: 200, resource: { id: SKILL } }, { status: 500, error: { detail: "Second assignment failed" } }] };
+    };
+    const onSecond = { a: { id: LATE, fileName: "late.pdf", type: "PDF", object: { objectId: SECOND, objectType: "SKILL" } } };
+    fsm.queryAnswer = (sql) => (sql.includes("FROM Attachment a WHERE") && deleteSent && sql.includes(SECOND) ? [onSecond] : []);
+
+    const removal = deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL, SECOND], certificateIds: [] });
+    await expect(removal).rejects.toThrow(/Second assignment failed/);
+    await expect(removal).rejects.not.toThrow(/uploaded while this was being removed/);
+  });
+
   it("reports what was already deleted when a cascade fails half-way", async () => {
     fsm.searchAnswer = (path) => {
       if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
