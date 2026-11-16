@@ -10,9 +10,10 @@ import { SkillMatrix } from "./matrix/SkillMatrix";
 import { SkillCatalog } from "./catalog/SkillCatalog";
 import { AssignmentDialog } from "./assignment/AssignmentDialog";
 import { ExpiryOverview } from "./expiry/ExpiryOverview";
+import { FindTechnician } from "./findTechnician/FindTechnician";
 import styles from "./SkillManagementApp.module.css";
 
-type TabKey = "matrix" | "expiry" | "catalogue";
+type TabKey = "matrix" | "find" | "expiry" | "catalogue";
 
 export function SkillManagementApp() {
   const state = useSkillData();
@@ -65,6 +66,9 @@ export function SkillManagementApp() {
                     onGoToCatalogue={() => setTab("catalogue")}
                   />
                 </Tab>
+                <Tab text="Find technician for a job" data-key="find" selected={tab === "find"}>
+                  <FindTechnician state={state} onOpen={(person, definition) => setCell({ person, definition })} />
+                </Tab>
                 <Tab text="Expiry overview" data-key="expiry" selected={tab === "expiry"}>
                   <ExpiryOverview state={state} onOpen={(person, definition) => setCell({ person, definition })} />
                 </Tab>
@@ -74,7 +78,7 @@ export function SkillManagementApp() {
               </TabContainer>
             </BusyIndicator>
             <p className={styles.footnote}>
-              Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data; only active persons are shown.
+              Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data. The matrix shows one row per active technician unless “Show all person records” is on.
             </p>
           </>
         )}

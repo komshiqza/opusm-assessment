@@ -1,0 +1,103 @@
+.wrapper {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.panel {
+  display: grid;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: var(--sapElement_BorderCornerRadius);
+  background: var(--sapList_Background);
+  min-width: 0;
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.75rem 1rem 0;
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  padding: 0.25rem 1rem 0.75rem;
+}
+
+.field,
+.fieldSmall {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field {
+  flex: 2 1 18rem;
+  max-width: 28rem;
+}
+
+.fieldSmall {
+  flex: 1 1 11rem;
+  max-width: 14rem;
+}
+
+.field > :last-child,
+.fieldSmall > :last-child {
+  width: 100%;
+}
+
+.muted {
+  color: var(--sapContent_LabelColor);
+  font-size: var(--sapFontSmallSize);
+}
+
+.padded {
+  padding: 0.25rem 1rem;
+}
+
+.person {
+  display: grid;
+}
+
+.cell {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--sapFontSmallSize);
+  color: var(--sapTextColor);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cell:focus-visible {
+  outline: var(--sapContent_FocusWidth) var(--sapContent_FocusStyle) var(--sapContent_FocusColor);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: bold;
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--sapContent_LabelColor);
+}
+
+.icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}

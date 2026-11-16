@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   Button,
+  CheckBox,
   Icon,
   IllustratedMessage,
   Input,
@@ -15,6 +16,7 @@ import {
 } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, todayIso, type AssignmentStatus } from "@/lib/domain/status";
 import { formatPersonType } from "@/lib/format";
+import { selectPersonRows } from "@/lib/domain/persons";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, statusText } from "./statusDisplay";
@@ -33,26 +35,29 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   const [personQuery, setPersonQuery] = useState("");
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [showAllRecords, setShowAllRecords] = useState(false);
   const today = todayIso();
 
   const definitions = useMemo(() => data?.definitions ?? [], [data]);
-  const visibleSkills = useMemo(
-    () => (skillIds.length ? definitions.filter((d) => skillIds.includes(d.id)) : definitions),
-    [definitions, skillIds],
-  );
+  const visibleSkills = useMemo(() => (skillIds.length ? definitions.filter((d) => skillIds.includes(d.id)) : definitions), [definitions, skillIds]);
 
   const statusOf = (personId: string, tagId: string) => getAssignmentStatus(assignmentByCell.get(cellKey(personId, tagId)), today);
 
   const query = personQuery.trim().toLowerCase();
-  const visiblePersons = (data?.persons ?? []).filter((p) => {
+  /** One row per technician by default (see src/lib/domain/persons.ts). */
+  const rows = useMemo(
+    () => selectPersonRows(data?.persons ?? [], state.assignedPersonIds, showAllRecords),
+    [data, state.assignedPersonIds, showAllRecords],
+  );
+  const visiblePersons = rows.filter((p) => {
     if (query && !`${p.name} ${p.jobTitle ?? ""}`.toLowerCase().includes(query)) return false;
     if (statusFilter === "all") return true;
     return visibleSkills.some((d) => statusOf(p.id, d.id) === statusFilter);
   });
 
-  /** Counts over all persons and the visible skills (independent of the person and status filter). */
+  /** Counts over all rows and the visible skills (independent of the person and status filter). */
   const counts = { valid: 0, expiring: 0, expired: 0 };
-  for (const p of data?.persons ?? []) {
+  for (const p of rows) {
     for (const d of visibleSkills) {
       const s = statusOf(p.id, d.id);
       if (s !== "none") counts[s]++;
@@ -109,6 +114,13 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             <Option value="none">With a missing skill</Option>
           </Select>
         </div>
+        <CheckBox
+          className={styles.reset}
+          text={`Show all person records (${data?.persons.length ?? 0})`}
+          checked={showAllRecords}
+          onChange={(e) => setShowAllRecords(e.target.checked)}
+          title="FSM keeps every technician twice (as employee and as ERP user) and also lists persons who are not technicians"
+        />
         {filtersActive && (
           <Button
             design="Transparent"
@@ -126,7 +138,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
 
       <div className={styles.summary} aria-live="polite">
         <Text>
-          {visiblePersons.length} of {data.persons.length} persons · {visibleSkills.length} skills
+          {visiblePersons.length} of {rows.length} {showAllRecords ? "person records" : "technicians"} · {visibleSkills.length} skills
         </Text>
         {(["expiring", "expired", "valid"] as const).map((s) => (
           <button

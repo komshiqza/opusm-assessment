@@ -26,6 +26,8 @@ export interface SkillDataState {
   assignmentByCell: Map<string, Assignment>;
   /** skill (assignment) id → certificates, newest first */
   certificatesBySkill: Map<string, Certificate[]>;
+  /** persons that hold at least one of our skills */
+  assignedPersonIds: Set<string>;
 }
 
 export const cellKey = (personId: string, tagId: string) => `${personId}|${tagId}`;
@@ -91,5 +93,7 @@ export function useSkillData(): SkillDataState {
     return map;
   }, [data]);
 
-  return { data, loading, refreshing, error, reload, assignmentByCell, certificatesBySkill };
+  const assignedPersonIds = useMemo(() => new Set((data?.assignments ?? []).map((a) => a.personId)), [data]);
+
+  return { data, loading, refreshing, error, reload, assignmentByCell, certificatesBySkill, assignedPersonIds };
 }
