@@ -11,9 +11,12 @@ export const DEFAULT_TAB_ORDER: TabKey[] = ["matrix", "expiry", "find", "catalog
 
 const STORAGE_KEY = "skill-management.tab-order";
 const CHANGE_EVENT = "skill-management:tab-order";
-/** This page's order when it could not be saved; used only while saving fails. */
-let memory: string | null = null;
-let saveFailed = false;
+/**
+ * This page's order (JSON). Read from storage once when the page opens; afterwards only this page's
+ * own reorder or reset changes it. A change in another window applies on the next page load, so an
+ * open page (and an open dialog in it) is never rebuilt by something the user did elsewhere.
+ */
+let current: string | null = null;
 
 /** Any stored value → a valid order: known keys once each, missing ones appended in default order. */
 export function parseTabOrder(raw: string | null | undefined): TabKey[] {
@@ -45,42 +48,37 @@ export function isDefaultTabOrder(order: TabKey[]): boolean {
 // --- Store for useSyncExternalStore -------------------------------------------------------------
 
 export function readStoredTabOrder(): string {
-  if (saveFailed) return memory ?? "";
-  try {
-    // Storage works: it is the truth. A missing key means default (e.g. reset in another window).
-    return window.localStorage.getItem(STORAGE_KEY) ?? "";
-  } catch {
-    return memory ?? "";
+  if (current === null) {
+    try {
+      current = window.localStorage.getItem(STORAGE_KEY) ?? "";
+    } catch {
+      current = ""; // storage blocked: default order
+    }
   }
+  return current;
 }
 
 export function subscribeTabOrder(onChange: () => void): () => void {
   window.addEventListener(CHANGE_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(CHANGE_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
+  return () => window.removeEventListener(CHANGE_EVENT, onChange);
 }
 
 export function saveTabOrder(order: TabKey[]): void {
-  memory = JSON.stringify(order);
+  current = JSON.stringify(order);
   try {
-    window.localStorage.setItem(STORAGE_KEY, memory);
-    saveFailed = false;
+    window.localStorage.setItem(STORAGE_KEY, current);
   } catch {
-    saveFailed = true; // blocked storage: the order lives in memory until the page is reloaded
+    // storage blocked or full: the order lives in this page until it is reloaded
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 export function resetTabOrder(): void {
-  memory = null;
+  current = "";
   try {
     window.localStorage.removeItem(STORAGE_KEY);
-    saveFailed = false;
   } catch {
-    saveFailed = true; // cannot remove it: this page shows the default from memory
+    // storage blocked: nothing to remove
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
