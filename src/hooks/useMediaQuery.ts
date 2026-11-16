@@ -21,3 +21,6 @@ export function useMediaQuery(query: string): boolean {
 
 /** Phone width: below the tablet breakpoint (768 px) and below UI5's "S" size. */
 export const PHONE_QUERY = "(max-width: 599px)";
+
+/** Below tablet width: the full tab names no longer fit next to each other. */
+export const NARROW_QUERY = "(max-width: 767px)";

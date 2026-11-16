@@ -22,7 +22,7 @@ import {
   subscribeTabOrder,
   type TabKey,
 } from "@/lib/tabOrder";
-import { PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
+import { NARROW_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { CANDIDATE_ID_VALID, NAME_PREFIX } from "@/lib/candidate";
 import { useSkillData } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
@@ -34,7 +34,7 @@ import { ExpiryOverview } from "./expiry/ExpiryOverview";
 import { FindTechnician } from "./findTechnician/FindTechnician";
 import styles from "./SkillManagementApp.module.css";
 
-/** Tab labels; phones get short ones so all four tabs fit next to each other. */
+/** Tab labels; below tablet width short ones, so all four tabs fit next to each other. */
 const TAB_LABELS: Record<TabKey, { full: string; short: string }> = {
   matrix: { full: "Skill matrix", short: "Matrix" },
   expiry: { full: "Expiring soon", short: "Expiring" },
@@ -49,6 +49,7 @@ export function SkillManagementApp() {
   const [tab, setTab] = useState<TabKey>("matrix");
   const [cell, setCell] = useState<{ person: Person; definition: SkillDefinition } | null>(null);
   const isPhone = useMediaQuery(PHONE_QUERY);
+  const isNarrow = useMediaQuery(NARROW_QUERY);
   const storedOrder = useSyncExternalStore(subscribeTabOrder, readStoredTabOrder, () => "");
   const order = useMemo(() => parseTabOrder(storedOrder), [storedOrder]);
   const openCell = (person: Person, definition: SkillDefinition) => setCell({ person, definition });
@@ -61,7 +62,15 @@ export function SkillManagementApp() {
     focusAfterMove.current = null;
     const frame = requestAnimationFrame(() => {
       const moved = document.querySelector<HTMLElement & { getDomRefInStrip?: () => HTMLElement | undefined }>(`ui5-tab[data-key="${key}"]`);
-      moved?.getDomRefInStrip?.()?.focus();
+      const inStrip = moved?.getDomRefInStrip?.();
+      if (inStrip && inStrip.getClientRects().length > 0) {
+        inStrip.focus();
+        return;
+      }
+      // The tab sits in the "More" menu: focus that menu's button instead of losing focus.
+      const container = document.querySelector("ui5-tabcontainer");
+      const overflowButtons = [...(container?.shadowRoot?.querySelectorAll<HTMLElement>("[data-ui5-stable^=overflow]") ?? [])];
+      overflowButtons.find((button) => button.getClientRects().length > 0)?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [order]);
@@ -151,7 +160,7 @@ export function SkillManagementApp() {
                     data-key={key}
                     movable
                     selected={tab === key}
-                    text={`${isPhone ? TAB_LABELS[key].short : TAB_LABELS[key].full}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
+                    text={`${isNarrow ? TAB_LABELS[key].short : TAB_LABELS[key].full}${key === "catalogue" ? ` (${state.data!.definitions.length})` : ""}`}
                   >
                     {content[key]}
                   </Tab>
