@@ -27,6 +27,35 @@
   align-self: flex-end;
 }
 
+/*
+ * "Starts later" counter: UI5 has no Information button design, so it gets the theme's Information
+ * button colours, like the Attention / Negative / Positive counters get theirs (light and dark from the
+ * theme). Pressed: as UI5 does for Attention, the strong border on a plain background.
+ */
+.counterInformation {
+  background-color: var(--sapButton_Information_Background);
+  border-color: var(--sapButton_Information_BorderColor);
+  color: var(--sapButton_Information_TextColor);
+}
+
+.counterInformation:hover {
+  background-color: var(--sapButton_Information_Hover_Background);
+  border-color: var(--sapButton_Information_Hover_BorderColor);
+  color: var(--sapButton_Information_Hover_TextColor);
+}
+
+.counterInformation[pressed],
+.counterInformation[active] {
+  background-color: var(--sapButton_Information_Active_Background);
+  border-color: var(--sapButton_Information_Active_BorderColor);
+  color: var(--sapButton_Information_Active_TextColor);
+}
+
+.counterInformation[pressed]:hover {
+  background-color: var(--sapButton_Information_Hover_Background);
+  border-color: var(--sapButton_Information_Active_BorderColor);
+}
+
 .summary {
   display: flex;
   flex-wrap: wrap;

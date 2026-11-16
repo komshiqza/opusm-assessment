@@ -227,6 +227,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           <ToggleButton
             key={s}
             design={COUNTER_DESIGN[s]}
+            className={s === "upcoming" ? styles.counterInformation : undefined}
             icon={STATUS_DISPLAY[s].icon}
             pressed={statusFilter === s}
             onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
@@ -243,11 +244,9 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
 
       {/* Table toolbar (Fiori: filters above, the table's own actions in its toolbar): who is in the table on the left, actions on the right. */}
       <div className={styles.tableToolbar}>
-        <Label id="matrix-show-label" showColon>
-          {t("matrix.show")}
-        </Label>
+        {/* Fiori content switch: no visible label (the counters say what each view shows), but an accessible name. */}
         <SegmentedButton
-          accessibleNameRef="matrix-show-label"
+          accessibleName={t("matrix.show")}
           onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
         >
           <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
