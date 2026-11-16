@@ -27,7 +27,7 @@ import {
 // Node has no FileReader; the base64 encoding itself is not under test here.
 vi.mock("@/lib/fsm/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/fsm/client")>()),
-  fileToBase64: async () => "JVBERi0xLjQgZHVtbXk=",
+  fileToBase64: async (file: Blob) => Buffer.from(await file.arrayBuffer()).toString("base64"),
 }));
 
 const DEMO_TAG = "C99F18163E7E42D4ACEB8349FDB313B7"; // "Gasnetz-Anschluss" in the demo company
@@ -54,7 +54,9 @@ let failingUploads: Set<string>;
 /** Attachment uploads with these file names never get an answer from the fake FSM. */
 let hangingUploads: Set<string>;
 /** Attachments FSM has on our skill (the fake's own store, used by the timeout checks). */
-let fsmAttachments: { id: string; fileName: string; description?: string }[];
+let fsmAttachments: { id: string; fileName: string; description?: string; content?: string }[];
+/** Downloading an attachment's content fails (the byte check after a timeout cannot finish). */
+let contentFails: boolean;
 /** A hanging upload is still stored by the fake FSM (the write arrived, only the answer is lost). */
 let hangingUploadsArrive: boolean;
 /** CoreSQL queries fail (e.g. the check after a timeout cannot reach FSM). */
@@ -80,6 +82,7 @@ beforeEach(() => {
   fsmAttachments = [];
   hangingUploadsArrive = false;
   queriesFail = false;
+  contentFails = false;
   bulkAnswer = () => null;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input, "http://localhost");
@@ -96,6 +99,8 @@ beforeEach(() => {
     }
     if (path.endsWith("/search")) return json({ content: searchAnswer(path, body.filter ?? []), last: true, totalElements: 0 });
     if (path.endsWith("/content") && method === "GET") {
+      const stored = fsmAttachments.find((x) => x.id === path.split("/")[3]);
+      if (stored) return contentFails ? json({ error: "simulated outage" }, 503) : new Response(stored.content ?? "", { status: 200 });
       return attachmentAnswer
         ? new Response("%PDF-1.4 dummy", { status: 200, headers: { "content-type": "application/pdf;charset=ISO-8859-1" } })
         : json({ error: "CA-20", message: "CA-20: Object Attachment with id CCCC… not found" }, 404);
@@ -113,10 +118,18 @@ beforeEach(() => {
     if (path.startsWith("data/v4/Attachment") && method === "POST") {
       if (failingUploads.has(body.fileName)) return json({ error: "CA-999", message: "CA-999: simulated upload failure" }, 500);
       if (hangingUploads.has(body.fileName)) {
-        if (hangingUploadsArrive) fsmAttachments.push({ id: `LATE${fsmAttachments.length}`, fileName: body.fileName, description: body.description });
+        if (hangingUploadsArrive) {
+          const content = Buffer.from(body.fileContent, "base64").toString("latin1");
+          fsmAttachments.push({ id: `${"A".repeat(28)}${String(fsmAttachments.length).padStart(4, "0")}`, fileName: body.fileName, description: body.description, content });
+        }
         return new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
       }
-      fsmAttachments.push({ id: `${ATTACHMENT.slice(0, 28)}${String(fsmAttachments.length).padStart(4, "0")}`, fileName: body.fileName, description: body.description });
+      fsmAttachments.push({
+        id: `${ATTACHMENT.slice(0, 28)}${String(fsmAttachments.length).padStart(4, "0")}`,
+        fileName: body.fileName,
+        description: body.description,
+        content: Buffer.from(body.fileContent, "base64").toString("latin1"),
+      });
       return json({ data: [{ attachment: { id: ATTACHMENT, fileName: body.fileName, type: body.type, object: { objectId: SKILL, objectType: "SKILL" } } }] });
     }
     return json({});
@@ -515,12 +528,53 @@ describe("a write FSM did not answer is checked once in FSM, never repeated auto
     hangingUploads = new Set(["b.pdf"]);
     const outcome = await uploadWithTimeout([b]);
     const lost = writes()[0].body as { fileName: string; description: string };
-    fsmAttachments.push({ id: "LATEARRIVAL", fileName: lost.fileName, description: lost.description }); // FSM finished it after all
+    fsmAttachments.push({ id: "E".repeat(32), fileName: lost.fileName, description: lost.description, content: "%PDF-1.4 dummy" }); // FSM finished it after all
 
     hangingUploads = new Set();
     const retry = await uploadCertificates(SKILL, retryItems(outcome.failed));
     expect(retry.confirmedLate.map((f) => f.name)).toEqual(["b.pdf"]);
     expect(uploads()).toEqual(["b.pdf"]); // only the original attempt
+  });
+
+  it("upload: an identical file that was already there before is not taken for this upload", async () => {
+    // Same name and same bytes, uploaded earlier on purpose: it carries no id of this upload.
+    fsmAttachments.push({ id: "D".repeat(32), fileName: "b.pdf", description: "", content: "%PDF-1.4 dummy" });
+    hangingUploads = new Set(["b.pdf"]); // this upload does not arrive
+    const outcome = await uploadWithTimeout([b]);
+    expect(outcome.confirmedLate).toEqual([]);
+    expect(outcome.failed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+  });
+
+  it("upload: the new attachment of this upload with the same bytes → uploaded", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    hangingUploadsArrive = true;
+    const outcome = await uploadWithTimeout([b]);
+    expect(outcome.confirmedLate.map((f) => f.name)).toEqual(["b.pdf"]);
+    // the content was downloaded and compared
+    expect(calls.some((c) => c.method === "GET" && c.path.endsWith("/content"))).toBe(true);
+  });
+
+  it("upload: the new attachment of this upload has different bytes → not confirmed, never a guess", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    const pending = uploadCertificates(SKILL, [b]);
+    await vi.advanceTimersByTimeAsync(1);
+    const sent = writes()[0].body as { fileName: string; description: string };
+    fsmAttachments.push({ id: "F".repeat(32), fileName: sent.fileName, description: sent.description, content: "%PDF-1.4 other!" });
+    await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+    const outcome = await pending;
+    expect(outcome.unconfirmed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+    expect(outcome.unconfirmed[0].error).toMatch(/content/i);
+    expect(outcome.confirmedLate).toEqual([]);
+    expect(outcome.failed).toEqual([]);
+  });
+
+  it("upload: the content of the new attachment cannot be downloaded → not confirmed", async () => {
+    hangingUploads = new Set(["b.pdf"]);
+    hangingUploadsArrive = true;
+    contentFails = true;
+    const outcome = await uploadWithTimeout([b]);
+    expect(outcome.unconfirmed.map((f) => f.file.name)).toEqual(["b.pdf"]);
+    expect(outcome.confirmedLate).toEqual([]);
   });
 
   it("upload: another file with the same name is never taken for the lost one (Codex finding)", async () => {

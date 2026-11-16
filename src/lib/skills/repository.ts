@@ -408,8 +408,23 @@ const UPLOAD_ID = /^[0-9a-f]{32}$/;
 const uploadDescription = (uploadId: string) => `Skill Management upload ${uploadId}`;
 const newUploadId = () => crypto.randomUUID().replaceAll("-", "");
 
-/** Did the upload with this id arrive? Reads only. */
-export async function checkCertificateUploaded(assignmentId: string, uploadId: string): Promise<WriteCheck<Certificate>> {
+const sha256 = async (data: ArrayBuffer) => new Uint8Array(await crypto.subtle.digest("SHA-256", data)).join(",");
+
+/** The stored content is exactly the file: same size first, then the same SHA-256 (measured: FSM returns the bytes unchanged). */
+async function sameBytes(attachmentId: string, file: File): Promise<boolean> {
+  const stored = await fsmAttachmentContent(attachmentId);
+  if (stored.size !== file.size) return false;
+  const [a, b] = await Promise.all([stored.arrayBuffer(), file.arrayBuffer()]);
+  return (await sha256(a)) === (await sha256(b));
+}
+
+/**
+ * Did the upload with this id arrive? Reads only. The attachment must carry this upload's id, which
+ * is new for every upload, so a file that was there before (even the same file, uploaded on purpose
+ * earlier) never counts. Its content must also be byte for byte the file: otherwise, or when the
+ * content cannot be read, the answer is "not confirmed", never a guess.
+ */
+export async function checkCertificateUploaded(assignmentId: string, uploadId: string, file: File): Promise<WriteCheck<Certificate>> {
   try {
     assertFsmId(assignmentId);
     if (!UPLOAD_ID.test(uploadId)) throw new Error("Invalid upload id.");
@@ -417,7 +432,13 @@ export async function checkCertificateUploaded(assignmentId: string, uploadId: s
       `SELECT a.id, a.fileName, a.type, a.createDateTime, a.object FROM Attachment a WHERE a.object.objectType = 'SKILL' AND a.object.objectId = '${assignmentId}' AND a.description = '${uploadDescription(uploadId)}'`,
       ["Attachment"],
     );
-    return rows.length ? { result: "done", value: toCertificate(rows[0].a) } : { result: "notDone" };
+    if (rows.length === 0) return { result: "notDone" };
+    if (rows.length > 1) return { result: "unconfirmed", error: "FSM shows more than one file from this upload." };
+    assertFsmId(rows[0].a.id);
+    if (!(await sameBytes(rows[0].a.id, file))) {
+      return { result: "unconfirmed", error: "FSM has a new file from this upload, but its content is not the same as the picked file." };
+    }
+    return { result: "done", value: toCertificate(rows[0].a) };
   } catch (e) {
     return { result: "unconfirmed", error: toUserMessage(e) };
   }
@@ -453,7 +474,7 @@ export async function uploadCertificates(
     onProgress?.(file, index, items.length);
     if (!(item instanceof File)) {
       // A retry after a timeout: first make sure the earlier upload did not arrive late.
-      const check = await checkCertificateUploaded(assignmentId, item.uploadId);
+      const check = await checkCertificateUploaded(assignmentId, item.uploadId, file);
       if (check.result !== "notDone") {
         recordCheck(outcome, file, item.uploadId, check);
         continue;
@@ -463,7 +484,7 @@ export async function uploadCertificates(
     try {
       outcome.uploaded.push(await uploadCertificate(assignmentId, file, uploadId));
     } catch (e) {
-      if (e instanceof FsmTimeoutError && e.write) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId));
+      if (e instanceof FsmTimeoutError && e.write) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId, file));
       else outcome.failed.push({ file, error: toUserMessage(e) });
     }
   }
@@ -473,7 +494,7 @@ export async function uploadCertificates(
 /** "Check again" for uploads that could not be confirmed. Reads only; uploads nothing. */
 export async function recheckUploads(assignmentId: string, unconfirmed: UploadOutcome["unconfirmed"]): Promise<UploadOutcome> {
   const outcome: UploadOutcome = { uploaded: [], confirmedLate: [], failed: [], unconfirmed: [] };
-  for (const { file, uploadId } of unconfirmed) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId));
+  for (const { file, uploadId } of unconfirmed) recordCheck(outcome, file, uploadId, await checkCertificateUploaded(assignmentId, uploadId, file));
   return outcome;
 }
 

@@ -27,7 +27,8 @@ export function UploadResultNotes({ results, onChange, onRetry, onCheckAgain, lo
     <>
       {confirmedLate.length > 0 && (
         <MessageStrip design="Positive" onClose={() => onChange({ ...results, confirmedLate: [] })}>
-          Uploaded ✓ {confirmedLate.join(", ")}. FSM answered too late, but the app checked: the file is in FSM.
+          Uploaded ✓ {confirmedLate.join(", ")}. FSM answered too late, but the app checked: the file from this upload is in FSM, with the same
+          content.
         </MessageStrip>
       )}
       {unconfirmed.length > 0 && (
