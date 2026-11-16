@@ -60,5 +60,6 @@ export interface ProficiencyScale {
 export interface AssignmentInput {
   startDate: string | null;
   endDate: string | null;
-  proficiencyId: string | null;
+  /** A level id; null = no level (clears it on an update); undefined = leave the stored level as it is. */
+  proficiencyId?: string | null;
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Bar, BusyIndicator, Button, Dialog, MessageStrip, Text } from "@ui5/webcomponents-react";
 import { toUserMessage } from "@/lib/errors";
+import { createOperationLock } from "@/lib/operationLock";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -19,32 +20,35 @@ interface ConfirmDialogProps {
 /** Confirmation for destructive actions: locks itself while running and keeps errors visible. */
 export function ConfirmDialog({ open, title, children, confirmText, onConfirm, onClose, confirmDisabled }: ConfirmDialogProps) {
   const [busy, setBusy] = useState(false);
-  /** Same as `busy`, but readable synchronously in UI5's before-close event (state would be stale there). */
-  const busyRef = useRef(false);
+  /**
+   * Same as `busy`, but synchronous: a second click on Delete before React re-renders is ignored,
+   * and UI5's before-close event (where state would be stale) can read it.
+   */
+  const [lock] = useState(createOperationLock);
   const [error, setError] = useState<string | null>(null);
 
-  const setRunning = (running: boolean) => {
-    busyRef.current = running;
-    setBusy(running);
-  };
-
   const close = () => {
-    if (busyRef.current) return;
+    if (lock.running) return;
     setError(null);
     onClose();
   };
 
   const confirm = async () => {
-    setRunning(true);
-    setError(null);
-    try {
-      await onConfirm();
-      setRunning(false);
-      onClose();
-    } catch (e) {
-      setError(toUserMessage(e));
-      setRunning(false);
-    }
+    const done = await lock.run(async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        await onConfirm();
+        return true;
+      } catch (e) {
+        setError(toUserMessage(e));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    });
+    // After the lock is released: UI5's before-close check must not block this close.
+    if (done) onClose();
   };
 
   return (
@@ -52,7 +56,7 @@ export function ConfirmDialog({ open, title, children, confirmText, onConfirm, o
       open={open}
       headerText={title}
       state="Critical"
-      onBeforeClose={(e) => busyRef.current && e.preventDefault()}
+      onBeforeClose={(e) => lock.running && e.preventDefault()}
       onClose={close}
       style={{ maxWidth: "32rem" }}
       footer={

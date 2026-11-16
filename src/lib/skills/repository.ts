@@ -9,12 +9,12 @@
  * Every write first re-reads its target from FSM and passes it through the guard in
  * `src/lib/fsm/guard.ts`. If the check fails, the write request is never sent.
  */
-import { assertBulkOk, fileToBase64, fsmAttachmentContent, fsmCreate, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
+import { FsmTimeoutError, assertBulkOk, fileToBase64, fsmAttachmentContent, fsmCreate, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
 import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
-import { effectiveStartDate, validateValidity } from "@/lib/domain/validation";
+import { effectiveStartDate, validateSkillName, validateValidity } from "@/lib/domain/validation";
 import { inspectCertificateFile } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import type { Assignment, AssignmentInput, Certificate, Person, ProficiencyScale, SkillDefinition } from "./types";
@@ -160,9 +160,20 @@ export async function ensureScale(): Promise<ProficiencyScale> {
 
 // --- Writes: skill definitions (Tags) ---------------------------------------------------
 
+/**
+ * The dialog checks names against the loaded list, which is out of date if a reload failed or
+ * another tab created a skill meanwhile. This checks FSM itself right before the write.
+ */
+async function assertNameIsFree(displayName: string, exceptTagId?: string): Promise<void> {
+  const others = (await loadSkillDefinitions()).filter((d) => d.id !== exceptTagId).map((d) => d.name);
+  const problem = validateSkillName(displayName, others);
+  if (problem) throw new Error(problem);
+}
+
 export async function createSkillDefinition(displayName: string, description: string): Promise<SkillDefinition> {
   const name = toScopedName(displayName);
   assertOwnName(name, "Tag");
+  await assertNameIsFree(displayName);
   const scale = await ensureScale();
   const [tag] = assertBulkOk<SkillServiceTag>(
     await skillApi("v2/tags", { method: "POST", body: [{ name, description: description.trim() || undefined, scaleId: scale.id }] }),
@@ -174,6 +185,7 @@ export async function updateSkillDefinition(tagId: string, displayName: string, 
   await assertOwnTag(tagId);
   const name = toScopedName(displayName);
   assertOwnName(name, "Tag");
+  await assertNameIsFree(displayName, tagId);
   const scale = await ensureScale();
   const [tag] = assertBulkOk<SkillServiceTag>(
     await skillApi("v2/tags", {
@@ -189,8 +201,24 @@ export interface DeleteImpact {
   certificates: number;
 }
 
+/** What deleting a skill definition would remove, with the ids (shown in the confirmation dialog). */
+export interface DeleteTargets extends DeleteImpact {
+  skillIds: string[];
+  certificateIds: string[];
+}
+
+/** FSM has more assignments or certificates for the skill than the user confirmed. Nothing was deleted. */
+export class DeleteImpactChangedError extends Error {
+  constructor(public readonly impact: DeleteTargets) {
+    super(
+      `Since you opened this dialog, the skill got more assignments or certificates in FSM (now ${impact.assignments} assignment(s) and ${impact.certificates} certificate(s)). Nothing was deleted. Check the new numbers and confirm again.`,
+    );
+    this.name = "DeleteImpactChangedError";
+  }
+}
+
 /** What deleting a skill definition would remove (shown in the confirmation dialog). */
-export async function getDeleteImpact(tagId: string): Promise<DeleteImpact & { skillIds: string[]; certificateIds: string[] }> {
+export async function getDeleteImpact(tagId: string): Promise<DeleteTargets> {
   assertFsmId(tagId);
   const skills = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [{ field: "tag.id", operator: "=", value: tagId }]);
   const skillIds = skills.filter((s) => !s.deleted && s.tagId === tagId).map((s) => s.id);
@@ -201,12 +229,17 @@ export async function getDeleteImpact(tagId: string): Promise<DeleteImpact & { s
 /**
  * Deletes a skill definition including its assignments and their certificates
  * (certificates → assignments → tag). FSM itself refuses to delete a Tag that still has Skills.
+ * `confirmed` is what the user saw and confirmed: if FSM now has an assignment or certificate that
+ * is not in it, nothing is deleted and DeleteImpactChangedError carries the new numbers.
  * Stops at the first failure and reports what was already deleted (that part cannot be undone).
  */
-export async function deleteSkillDefinition(tagId: string): Promise<DeleteImpact> {
+export async function deleteSkillDefinition(tagId: string, confirmed: Pick<DeleteTargets, "skillIds" | "certificateIds">): Promise<DeleteImpact> {
   await assertOwnTag(tagId);
   // Skills of an own tag are own skills, and their attachments are own attachments.
-  const { skillIds, certificateIds } = await getDeleteImpact(tagId);
+  const current = await getDeleteImpact(tagId);
+  const { skillIds, certificateIds } = current;
+  const unconfirmed = skillIds.some((id) => !confirmed.skillIds.includes(id)) || certificateIds.some((id) => !confirmed.certificateIds.includes(id));
+  if (unconfirmed) throw new DeleteImpactChangedError(current);
   const done: DeleteImpact = { assignments: 0, certificates: 0 };
   try {
     for (const id of certificateIds) {
@@ -296,6 +329,8 @@ export async function updateAssignment(assignmentId: string, input: AssignmentIn
   await skillApi(`v1/tags/${tagId}/skills/${assignmentId}`, {
     method: "PATCH",
     body: {
+      // Measured: FSM keeps the stored level when the field is left out (undefined), and clears it
+      // on null. The dialog leaves it out unless the user picked a level or "No level".
       proficiencyId: input.proficiencyId,
       startDate: dates.startDate,
       endDate: dates.endDate ?? OPEN_END_DATE,
@@ -340,6 +375,11 @@ export interface UploadOutcome {
   uploaded: Certificate[];
   /** Files FSM did not accept, with the reason for the user. Nothing else was lost. */
   failed: { file: File; error: string }[];
+  /**
+   * Files FSM did not answer for in time: they may be uploaded or not. Never retried automatically;
+   * the user checks the refreshed list first (a blind retry could upload the file twice).
+   */
+  unknown: { file: File; error: string }[];
 }
 
 /**
@@ -351,13 +391,14 @@ export async function uploadCertificates(
   files: File[],
   onProgress?: (file: File, index: number, total: number) => void,
 ): Promise<UploadOutcome> {
-  const outcome: UploadOutcome = { uploaded: [], failed: [] };
+  const outcome: UploadOutcome = { uploaded: [], failed: [], unknown: [] };
   for (const [index, file] of files.entries()) {
     onProgress?.(file, index, files.length);
     try {
       outcome.uploaded.push(await uploadCertificate(assignmentId, file));
     } catch (e) {
-      outcome.failed.push({ file, error: toUserMessage(e) });
+      const unknownResult = e instanceof FsmTimeoutError && e.write;
+      (unknownResult ? outcome.unknown : outcome.failed).push({ file, error: toUserMessage(e) });
     }
   }
   return outcome;

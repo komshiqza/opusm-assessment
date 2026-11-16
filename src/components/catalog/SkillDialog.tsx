@@ -5,6 +5,7 @@ import { Bar, BusyIndicator, Button, Dialog, Input, Label, MessageStrip, TextAre
 import { MAX_SKILL_NAME_LENGTH, validateSkillName } from "@/lib/domain/validation";
 import { createSkillDefinition, updateSkillDefinition } from "@/lib/skills/repository";
 import { toUserMessage } from "@/lib/errors";
+import { createOperationLock } from "@/lib/operationLock";
 import type { SkillDefinition } from "@/lib/skills/types";
 
 interface SkillDialogProps {
@@ -21,32 +22,39 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A fast second click (or Enter) must not create the skill twice. */
+  const [lock] = useState(createOperationLock);
 
   const otherNames = existingNames.filter((n) => n !== skill?.name);
   const nameError = validateSkillName(name, otherNames);
 
   const save = async () => {
-    setTouched(true);
-    if (nameError) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (skill) await updateSkillDefinition(skill.id, name.trim(), description);
-      else await createSkillDefinition(name.trim(), description);
-      await onSaved(name.trim());
-      onClose();
-    } catch (e) {
-      setError(toUserMessage(e));
-    } finally {
-      setBusy(false);
-    }
+    const saved = await lock.run(async () => {
+      setTouched(true);
+      if (nameError) return false;
+      setBusy(true);
+      setError(null);
+      try {
+        if (skill) await updateSkillDefinition(skill.id, name.trim(), description);
+        else await createSkillDefinition(name.trim(), description);
+        await onSaved(name.trim());
+        return true;
+      } catch (e) {
+        setError(toUserMessage(e));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    });
+    // After the lock is released: UI5's before-close check must not block this close.
+    if (saved) onClose();
   };
 
   return (
     <Dialog
       open
       headerText={skill ? `Edit skill “${skill.name}”` : "Create skill"}
-      onBeforeClose={(e) => busy && e.preventDefault()}
+      onBeforeClose={(e) => (busy || lock.running) && e.preventDefault()}
       onClose={onClose}
       style={{ width: "min(30rem, 100vw)" }}
       footer={

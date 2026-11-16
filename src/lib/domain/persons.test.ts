@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countPhysicalPersons, personsWithoutJobTitle, selectPersonRows } from "./persons";
+import { countPhysicalPersons, personsWithoutJobTitle, recordsNeedingType, selectPersonRows } from "./persons";
 
 /** Records as SAP links them: every record's refId is the id of the ERPUSER record (which references itself). */
 const record = (id: string, type: string, refId: string, jobTitle: string | null = "Service Technician") => ({ id, type, refId, jobTitle });
@@ -63,5 +63,19 @@ describe("personsWithoutJobTitle", () => {
 
   it("does not mark a person whose job title sits on another linked record", () => {
     expect(personsWithoutJobTitle(all).has("eva")).toBe(false);
+  });
+});
+
+describe("recordsNeedingType (\"ERP user\" etc. only where it tells rows apart)", () => {
+  it("shows no record type when every person has one row", () => {
+    expect(recordsNeedingType([marcoErp, annaErp, lukasErp])).toEqual(new Set());
+  });
+
+  it("shows the record type on two rows of the same person", () => {
+    expect(recordsNeedingType([marcoErp, annaErp, annaSales])).toEqual(new Set(["anna", "anna-sales"]));
+  });
+
+  it("does not count the same record twice (e.g. one row per assignment in the expiry list)", () => {
+    expect(recordsNeedingType([annaErp, annaErp, marcoErp])).toEqual(new Set());
   });
 });

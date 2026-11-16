@@ -74,25 +74,30 @@ describe("matchTechnicians", () => {
   };
   const lookup = (personId: string, tagId: string) => held[`${personId}|${tagId}`];
 
-  it("splits persons into ready, almost (exactly one gap) and the rest", () => {
+  it("splits persons into ready, almost (one gap that can be fixed), missing one skill, and the rest", () => {
     const result = matchTechnicians(persons, [firstAid, heights], lookup, JOB, TODAY, null);
     expect(result.ready.map((r) => r.person.id)).toEqual(["anna"]);
-    expect(result.almost.map((r) => [r.person.id, r.reason])).toEqual([
-      ["ben", "First aid ends 6 days before the job"],
-      ["cara", "Missing: Working at heights"],
-    ]);
+    expect(result.almost.map((r) => [r.person.id, r.reason])).toEqual([["ben", "First aid ends 6 days before the job"]]);
+    expect(result.missingOne.map((r) => [r.person.id, r.skillName])).toEqual([["cara", "Working at heights"]]);
     expect(result.others).toBe(1);
   });
 
-  it("lists renewals before plain gaps, because those can be fixed before the job", () => {
-    const people = ["aaron", "zoe"].map((id) => ({ id, name: id }));
-    const skills: Record<string, ReturnType<typeof assignment>> = { "zoe|aid": assignment({ endDate: "2026-12-10" }) };
-    const result = matchTechnicians(people, [firstAid], (p, s) => skills[`${p}|${s}`], JOB, TODAY, null);
-    expect(result.almost.map((r) => r.person.id)).toEqual(["zoe", "aaron"]);
+  it("with one required skill, 'almost' holds only renewals, levels and later starts, not everyone without the skill", () => {
+    const people = ["aaron", "bea", "zoe", "lev", "sam"].map((id) => ({ id, name: id }));
+    const skills: Record<string, ReturnType<typeof assignment>> = {
+      "zoe|aid": assignment({ endDate: "2026-12-10" }), // renew before the job
+      "lev|aid": assignment({ proficiencyLevel: 1, proficiencyName: "Basic" }), // level too low
+      "sam|aid": assignment({ startDate: "2026-12-20" }), // starts after the job
+    };
+    const expert = { level: 3, name: "Expert" };
+    const result = matchTechnicians(people, [firstAid], (p, s) => skills[`${p}|${s}`], JOB, TODAY, expert);
+    expect(result.almost.map((r) => r.person.id)).toEqual(["zoe", "lev", "sam"]);
+    expect(result.missingOne.map((r) => r.person.id)).toEqual(["aaron", "bea"]);
+    expect(result.others).toBe(0);
   });
 
   it("returns nothing when no skill is required", () => {
-    expect(matchTechnicians(persons, [], lookup, JOB, TODAY, null)).toEqual({ ready: [], almost: [], others: 0 });
+    expect(matchTechnicians(persons, [], lookup, JOB, TODAY, null)).toEqual({ ready: [], almost: [], missingOne: [], others: 0 });
   });
 });
 
@@ -113,7 +118,16 @@ describe("people without a job title", () => {
   it("leaves out a person without a job title who has none of the required skills", () => {
     const held: Record<string, ReturnType<typeof assignment>> = { "staff|heights": assignment() };
     const result = matchTechnicians([staff], [firstAid], (p, s) => held[`${p}|${s}`], JOB, TODAY, null, notTechnician);
-    expect(result).toEqual({ ready: [], almost: [], others: 0 });
+    expect(result).toEqual({ ready: [], almost: [], missingOne: [], others: 0 });
+  });
+
+  it("puts technicians first in the 'missing one skill' list too", () => {
+    const held: Record<string, ReturnType<typeof assignment>> = { "staff|heights": assignment(), "tech|heights": assignment() };
+    const result = matchTechnicians([staff, tech], [firstAid, heights], (p, s) => held[`${p}|${s}`], JOB, TODAY, null, notTechnician);
+    expect(result.missingOne.map((r) => [r.person.id, r.technician])).toEqual([
+      ["tech", true],
+      ["staff", false],
+    ]);
   });
 
   it("puts technicians first in the 'almost' list too", () => {

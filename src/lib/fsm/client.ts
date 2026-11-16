@@ -17,20 +17,56 @@ export class FsmError extends Error {
   }
 }
 
+/** How long the app waits for FSM before giving up on a request (a hung request would lock a dialog). */
+export const FSM_TIMEOUT_MS = 60_000;
+
+/**
+ * FSM did not answer in time. For a write the result is unknown: FSM may have saved it, so the user
+ * must check (reload) before trying again, never simply retry.
+ */
+export class FsmTimeoutError extends FsmError {
+  constructor(public readonly write: boolean) {
+    super(
+      write
+        ? `FSM did not answer within ${FSM_TIMEOUT_MS / 1000} seconds. The change may have been saved or not, and FSM may still finish it in the next minutes: reload in a minute to check before you try again.`
+        : `FSM did not answer within ${FSM_TIMEOUT_MS / 1000} seconds. Try again.`,
+      0,
+    );
+    this.name = "FsmTimeoutError";
+  }
+}
+
 const PROXY = "/api/fsm";
 const MAX_PAGE_SIZE = 1000;
+
+/** Searches (Skill Service) and CoreSQL queries use POST but only read. */
+const isRead = (path: string, method: string) => method === "GET" || path.startsWith("query/") || path.endsWith("/search");
+
+/** fetch with the FSM time limit; a timeout becomes FsmTimeoutError (reading the body counts too). */
+async function fetchWithTimeout<T>(url: string, init: RequestInit, write: boolean, read: (res: Response) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FSM_TIMEOUT_MS);
+  try {
+    return await read(await fetch(url, { ...init, signal: controller.signal }));
+  } catch (e) {
+    if (controller.signal.aborted) throw new FsmTimeoutError(write);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function call<T>(path: string, init: RequestInit & { params?: Record<string, string | number | boolean> } = {}): Promise<T> {
   const { params, ...rest } = init;
   const qs = params ? `?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}` : "";
-  const res = await fetch(`${PROXY}/${path}${qs}`, {
-    ...rest,
-    headers: { "Content-Type": "application/json", ...(rest.headers ?? {}) },
+  const method = (rest.method ?? "GET").toUpperCase();
+  const requestInit = { ...rest, headers: { "Content-Type": "application/json", ...(rest.headers ?? {}) } };
+  return fetchWithTimeout(`${PROXY}/${path}${qs}`, requestInit, !isRead(path, method), async (res) => {
+    const text = await res.text();
+    const data = text ? safeJson(text) : null;
+    if (!res.ok) throw toFsmError(res.status, text, data);
+    return data as T;
   });
-  const text = await res.text();
-  const data = text ? safeJson(text) : null;
-  if (!res.ok) throw toFsmError(res.status, text, data);
-  return data as T;
 }
 
 /** FSM's own message from an error response (Data/Query API: `message`/`error`, proxy: `error`). */
@@ -123,12 +159,13 @@ export function attachmentContentUrl(attachmentId: string): string {
 
 /** Downloads an attachment's binary through the proxy. Errors carry FSM's own message, like every other call. */
 export async function fsmAttachmentContent(attachmentId: string): Promise<Blob> {
-  const res = await fetch(attachmentContentUrl(attachmentId));
-  if (!res.ok) {
-    const text = await res.text();
-    throw toFsmError(res.status, text, text ? safeJson(text) : null);
-  }
-  return res.blob();
+  return fetchWithTimeout(attachmentContentUrl(attachmentId), {}, false, async (res) => {
+    if (!res.ok) {
+      const text = await res.text();
+      throw toFsmError(res.status, text, text ? safeJson(text) : null);
+    }
+    return res.blob();
+  });
 }
 
 /** File → base64 (without the `data:...;base64,` prefix), as expected by `Attachment.fileContent`. */

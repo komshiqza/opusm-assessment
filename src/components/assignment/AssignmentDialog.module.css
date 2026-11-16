@@ -27,6 +27,11 @@
   width: 100%;
 }
 
+/* Basic / Advanced / Expert side by side, sharing the full width. */
+.levels {
+  width: 100%;
+}
+
 .muted {
   color: var(--sapContent_LabelColor);
   font-size: var(--sapFontSmallSize);

@@ -16,8 +16,10 @@ import {
   TableRow,
   Text,
 } from "@ui5/webcomponents-react";
-import { addDays, daysBetween, getAssignmentStatus, todayIso } from "@/lib/domain/status";
+import { addDays, daysBetween, getAssignmentStatus } from "@/lib/domain/status";
+import { useToday } from "@/hooks/useToday";
 import { formatDate, formatPersonType } from "@/lib/format";
+import { recordsNeedingType } from "@/lib/domain/persons";
 import type { SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
@@ -34,7 +36,7 @@ interface ExpiryOverviewProps {
 export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
   const [days, setDays] = usePageState("expiry.days", 30);
   const [includeExpired, setIncludeExpired] = usePageState("expiry.includeExpired", true);
-  const today = todayIso();
+  const today = useToday();
   const until = addDays(today, days);
 
   const rows = useMemo(() => {
@@ -49,6 +51,9 @@ export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
       })
       .sort((x, y) => x.endDate.localeCompare(y.endDate) || x.person.name.localeCompare(y.person.name));
   }, [state.data, until, today, includeExpired]);
+
+  /** "ERP user" etc. only where two records of one person are listed. */
+  const needsType = useMemo(() => recordsNeedingType(rows.map((r) => r.person)), [rows]);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "0.75rem" }}>
@@ -110,7 +115,8 @@ export function ExpiryOverview({ state, onOpen }: ExpiryOverviewProps) {
                 </TableCell>
                 <TableCell>
                   <Text>
-                    <b>{person.name}</b> · {formatPersonType(person.type)}
+                    <b>{person.name}</b>
+                    {needsType.has(person.id) ? ` · ${formatPersonType(person.type)}` : ""}
                   </Text>
                 </TableCell>
                 <TableCell>

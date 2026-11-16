@@ -48,10 +48,12 @@ export interface JobMatch<P> {
   /** All required skills count on the job date. Technicians first, then people without a job title. */
   ready: { person: P; technician: boolean }[];
   /**
-   * Exactly one required skill is missing or does not count; `reason` says which and why.
-   * Skills that exist but do not count (renewal, level) come first, plain "Missing" last.
+   * Exactly one required skill does not count, and it can be fixed before the job: the person has it,
+   * but it must be renewed, needs a higher level, or starts too late. `reason` says which and why.
    */
-  almost: { person: P; reason: string; missing: boolean; technician: boolean }[];
+  almost: { person: P; reason: string; technician: boolean }[];
+  /** Exactly one required skill is not assigned at all (everything else counts). Shown collapsed: with one required skill it is nearly everyone. */
+  missingOne: { person: P; skillName: string; technician: boolean }[];
   /** Persons with two or more gaps (not listed). */
   others: number;
 }
@@ -66,20 +68,23 @@ export function matchTechnicians<P extends { id: string; name: string }, S exten
   /** People without a job title are listed after the technicians, and only if they hold a required skill. */
   isTechnician: (person: P) => boolean = () => true,
 ): JobMatch<P> {
-  const result: JobMatch<P> = { ready: [], almost: [], others: 0 };
+  const result: JobMatch<P> = { ready: [], almost: [], missingOne: [], others: 0 };
   if (requiredSkills.length === 0) return result;
   for (const person of persons) {
     const technician = isTechnician(person);
     if (!technician && !requiredSkills.some((s) => lookup(person.id, s.id))) continue;
     const gaps = requiredSkills
-      .map((s) => checkSkillForJob(lookup(person.id, s.id), s, jobDate, today, minLevel))
-      .filter((c) => !c.ok);
+      .map((s) => ({ skill: s, check: checkSkillForJob(lookup(person.id, s.id), s, jobDate, today, minLevel) }))
+      .filter((g) => !g.check.ok);
     if (gaps.length === 0) result.ready.push({ person, technician });
-    else if (gaps.length === 1) result.almost.push({ person, reason: gaps[0].reason!, missing: gaps[0].missing, technician });
-    else result.others++;
+    else if (gaps.length > 1) result.others++;
+    else if (gaps[0].check.missing) result.missingOne.push({ person, skillName: gaps[0].skill.name, technician });
+    else result.almost.push({ person, reason: gaps[0].check.reason!, technician });
   }
-  // Stable sorts: technicians first; in "almost", renewals before plain gaps; otherwise the persons' order.
-  result.ready.sort((a, b) => Number(b.technician) - Number(a.technician));
-  result.almost.sort((a, b) => Number(b.technician) - Number(a.technician) || Number(a.missing) - Number(b.missing));
+  // Stable sorts: technicians first, otherwise the persons' order.
+  const technicianFirst = (a: { technician: boolean }, b: { technician: boolean }) => Number(b.technician) - Number(a.technician);
+  result.ready.sort(technicianFirst);
+  result.almost.sort(technicianFirst);
+  result.missingOne.sort(technicianFirst);
   return result;
 }

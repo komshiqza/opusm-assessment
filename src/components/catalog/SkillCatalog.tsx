@@ -15,7 +15,8 @@ import {
   ToolbarButton,
   ToolbarSpacer,
 } from "@ui5/webcomponents-react";
-import { getAssignmentStatus, todayIso } from "@/lib/domain/status";
+import { getAssignmentStatus } from "@/lib/domain/status";
+import { useToday } from "@/hooks/useToday";
 import type { SkillDataState } from "@/hooks/useSkillData";
 import type { SkillDefinition } from "@/lib/skills/types";
 import { useToast } from "@/components/common/Toast";
@@ -28,7 +29,7 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
   const toast = useToast();
   const [dialog, setDialog] = useState<DialogState>(null);
   const definitions = state.data?.definitions ?? [];
-  const today = todayIso();
+  const today = useToday();
 
   /** Per skill: number of assignments, of those expiring/expired, and certificates. */
   const usage = new Map<string, { assigned: number; attention: number; certificates: number }>();
@@ -109,8 +110,10 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
           existingNames={definitions.map((d) => d.name)}
           onClose={() => setDialog(null)}
           onSaved={async (name) => {
-            await state.reload();
-            toast(dialog.kind === "edit" ? `Skill “${name}” saved` : `Skill “${name}” created`);
+            const refreshed = await state.reload();
+            const saved = dialog.kind === "edit" ? `Skill “${name}” saved` : `Skill “${name}” created`;
+            // A failed reload shows its own message with "Try again" on the page once the dialog closes.
+            toast(refreshed ? saved : `${saved}, but the list could not be refreshed`);
           }}
         />
       )}
@@ -120,12 +123,12 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
           reload={state.reload}
           onClose={() => setDialog(null)}
           onDeleted={async (impact) => {
-            await state.reload();
-            toast(
-              impact.assignments
-                ? `Skill “${dialog.skill.name}” deleted with ${impact.assignments} assignment(s) and ${impact.certificates} certificate(s)`
-                : `Skill “${dialog.skill.name}” deleted`,
-            );
+            const refreshed = await state.reload();
+            const deleted = impact.assignments
+              ? `Skill “${dialog.skill.name}” deleted with ${impact.assignments} assignment(s) and ${impact.certificates} certificate(s)`
+              : `Skill “${dialog.skill.name}” deleted`;
+            // A failed reload shows its own message with "Try again" on the page once the dialog closes.
+            toast(refreshed ? deleted : `${deleted}, but the list could not be refreshed`);
           }}
         />
       )}

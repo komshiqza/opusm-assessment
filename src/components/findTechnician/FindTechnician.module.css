@@ -103,3 +103,16 @@
   height: 0.875rem;
   flex: none;
 }
+
+/* People who do not have one required skill: one collapsed line that opens on click. */
+.missingPanel {
+  margin-inline: 1rem;
+}
+
+.missingList {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.25rem;
+  color: var(--sapTextColor);
+}

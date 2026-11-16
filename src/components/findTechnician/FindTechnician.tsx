@@ -9,6 +9,7 @@ import {
   MultiComboBox,
   MultiComboBoxItem,
   Option,
+  Panel,
   Select,
   Table,
   TableCell,
@@ -19,9 +20,10 @@ import {
   Title,
 } from "@ui5/webcomponents-react";
 import { checkSkillForJob, matchTechnicians } from "@/lib/domain/jobMatch";
-import { normalizeEndDate, todayIso } from "@/lib/domain/status";
+import { normalizeEndDate } from "@/lib/domain/status";
+import { useToday } from "@/hooks/useToday";
 import { validateValidity } from "@/lib/domain/validation";
-import { personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
+import { personsWithoutJobTitle, recordsNeedingType, selectPersonRows } from "@/lib/domain/persons";
 import { formatDate, formatPersonType } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
@@ -42,11 +44,13 @@ interface FindTechnicianProps {
  * no extra FSM calls, and no FSM jobs or requirements are read or written.
  */
 export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
-  const today = todayIso();
+  const today = useToday();
   const [skillIds, setSkillIds] = usePageState<string[]>("find.skillIds", []);
   /** "any" or a proficiency id. Not "": UI5's Select shows an empty value as "nothing selected". */
   const [minLevelId, setMinLevelId] = usePageState("find.minLevelId", ANY_LEVEL);
-  const [jobDate, setJobDate] = usePageState("find.jobDate", today);
+  /** null until the user picks a date: the job date then follows "today", also past midnight. */
+  const [pickedJobDate, setJobDate] = usePageState<string | null>("find.jobDate", null);
+  const jobDate = pickedJobDate ?? today;
 
   const definitions = useMemo(() => state.data?.definitions ?? [], [state.data]);
   const levels = state.data?.scale?.levels ?? [];
@@ -55,6 +59,8 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
   const dateError = jobDate ? validateValidity(jobDate, null) : "Please enter the job date.";
 
   const persons = useMemo(() => selectPersonRows(state.data?.persons ?? [], state.assignedPersonIds, false), [state.data, state.assignedPersonIds]);
+  /** "ERP user" etc. only where two records of one person are listed (one row per person otherwise). */
+  const needsType = useMemo(() => recordsNeedingType(persons), [persons]);
   const lookup = (personId: string, skillId: string) => state.assignmentByCell.get(cellKey(personId, skillId));
   const withoutJobTitle = useMemo(() => personsWithoutJobTitle(state.data?.persons ?? []), [state.data]);
   const result = dateError ? null : matchTechnicians(persons, required, lookup, jobDate, today, minLevel, (p) => !withoutJobTitle.has(p.id));
@@ -106,7 +112,7 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
     <TableCell>
       <span className={styles.person}>
         <b>{p.name}</b>
-        <span className={styles.muted}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
+        <span className={styles.muted}>{[p.jobTitle, needsType.has(p.id) ? formatPersonType(p.type) : ""].filter(Boolean).join(" · ")}</span>
         {!technician && <NoJobTitleTag />}
       </span>
     </TableCell>
@@ -219,7 +225,7 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
               <Title level="H4">
-                Almost ({result.almost.length}): one skill missing or not valid on {formatDate(jobDate)}
+                Almost ({result.almost.length}): one skill to renew, raise to the level, or that starts too late for {formatDate(jobDate)}
               </Title>
             </div>
             {result.almost.length > 0 ? (
@@ -237,7 +243,34 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
                 ))}
               </Table>
             ) : (
-              <Text className={styles.padded}>Nobody is missing exactly one skill.</Text>
+              <Text className={styles.padded}>Nobody is just one renewal, level or start date away.</Text>
+            )}
+            {result.missingOne.length > 0 && (
+              // Collapsed: with one required skill this is nearly everyone, and not having a skill cannot be fixed before the job.
+              <Panel
+                collapsed
+                className={styles.missingPanel}
+                headerText={
+                  required.length === 1
+                    ? `${result.missingOne.length} ${result.missingOne.length === 1 ? "person doesn't" : "people don't"} have this skill`
+                    : `${result.missingOne.length} ${result.missingOne.length === 1 ? "person is" : "people are"} missing one of these skills`
+                }
+              >
+                <ul className={styles.missingList}>
+                  {result.missingOne.map(({ person, skillName, technician }) => (
+                    <li key={person.id}>
+                      <b>{person.name}</b>
+                      {required.length > 1 && <span className={styles.muted}> · Missing: {skillName}</span>}
+                      {!technician && (
+                        <>
+                          {" "}
+                          <NoJobTitleTag />
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
             )}
             {result.others > 0 && (
               <Text className={`${styles.muted} ${styles.padded}`}>

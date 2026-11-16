@@ -59,3 +59,17 @@ export function personsWithoutJobTitle(persons: PersonRecord[]): Set<string> {
   }
   return ids;
 }
+
+/**
+ * Records whose type ("ERP user", "Employee") must be shown: only where two different records of the
+ * same person are on screen, which would otherwise look identical. With one row per person the type
+ * is technical noise. A record listed several times (one row per assignment) counts once.
+ */
+export function recordsNeedingType(rows: PersonRecord[]): Set<string> {
+  const recordsPerPerson = new Map<string, Set<string>>();
+  for (const p of rows) {
+    const key = physicalPersonKey(p);
+    recordsPerPerson.set(key, (recordsPerPerson.get(key) ?? new Set()).add(p.id));
+  }
+  return new Set([...recordsPerPerson.values()].filter((ids) => ids.size > 1).flatMap((ids) => [...ids]));
+}

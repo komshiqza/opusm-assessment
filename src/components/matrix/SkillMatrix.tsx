@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 import {
   Button,
   Icon,
@@ -16,9 +16,11 @@ import {
   Text,
   ToggleButton,
 } from "@ui5/webcomponents-react";
-import { getAssignmentStatus, todayIso, type AssignmentStatus } from "@/lib/domain/status";
+import { getAssignmentStatus, type AssignmentStatus } from "@/lib/domain/status";
+import { useToday } from "@/hooks/useToday";
 import { formatPersonType } from "@/lib/format";
-import { personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
+import { personsWithoutJobTitle, recordsNeedingType, selectPersonRows } from "@/lib/domain/persons";
+import { knownSkillIds } from "@/lib/domain/skillFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
@@ -45,14 +47,20 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
   const [statusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
   const [showAllRecords, setShowAllRecords] = usePageState("matrix.showAllRecords", false);
-  const today = todayIso();
+  const today = useToday();
   const isPhone = useMediaQuery(PHONE_QUERY);
   /** Below 1280 px: icon plus short date, narrower columns (the phone has its own cards). */
   const isCompact = useMediaQuery(COMPACT_QUERY) && !isPhone;
   const [scrollerRef, canScrollRight] = useCanScrollRight();
 
   const definitions = useMemo(() => data?.definitions ?? [], [data]);
-  const visibleSkills = useMemo(() => (skillIds.length ? definitions.filter((d) => skillIds.includes(d.id)) : definitions), [definitions, skillIds]);
+  /** The skill filter without skills deleted meanwhile; a filter on only deleted skills means "all skills". */
+  const filterIds = knownSkillIds(skillIds, definitions);
+  const visibleSkills = useMemo(() => (filterIds.length ? definitions.filter((d) => filterIds.includes(d.id)) : definitions), [definitions, filterIds]);
+  // Forget deleted skills in the stored filter too (only with loaded data: before that nothing is known).
+  useEffect(() => {
+    if (data && filterIds !== skillIds) setSkillIds(filterIds);
+  }, [data, filterIds, skillIds, setSkillIds]);
 
   const statusOf = (personId: string, tagId: string) => getAssignmentStatus(assignmentByCell.get(cellKey(personId, tagId)), today);
 
@@ -69,6 +77,10 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
     if (statusFilter === "all") return true;
     return visibleSkills.some((d) => statusOf(p.id, d.id) === statusFilter);
   });
+
+  /** "ERP user" etc. only with "All person records", or where two records of one person are listed. */
+  const needsType = recordsNeedingType(visiblePersons);
+  const typeOf = (p: Person) => (showAllRecords || needsType.has(p.id) ? formatPersonType(p.type) : "");
 
   /** Counts over all rows and the visible skills (independent of the person and status filter). */
   const counts = { upcoming: 0, valid: 0, expiring: 0, expired: 0 };
@@ -91,7 +103,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
     );
   }
 
-  const filtersActive = Boolean(query || skillIds.length || statusFilter !== "all");
+  const filtersActive = Boolean(query || filterIds.length || statusFilter !== "all");
 
   /** Everything one cell (or one line of a phone card) shows. */
   const cellInfo = (p: Person, d: SkillDefinition) => {
@@ -235,7 +247,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             <li key={p.id} className={styles.card}>
               <div className={styles.cardHead}>
                 <span className={styles.personName}>{p.name}</span>
-                <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
+                <span className={styles.personMeta}>{[p.jobTitle, typeOf(p)].filter(Boolean).join(" · ")}</span>
               </div>
               <ul className={styles.cardSkills}>
                 {visibleSkills
@@ -273,7 +285,11 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
           ))}
         </ul>
       ) : (
-        <div className={styles.scrollFrame} data-more-right={canScrollRight || undefined}>
+        <div
+          className={styles.scrollFrame}
+          data-more-right={canScrollRight || undefined}
+          style={{ "--skill-columns": visibleSkills.length } as CSSProperties}
+        >
           <div className={styles.scroller} ref={scrollerRef}>
             <table className={styles.table} data-compact={isCompact || undefined}>
               <thead>
@@ -294,14 +310,14 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
                     <th scope="row" className={styles.personCell}>
                       <span className={styles.personName}>{p.name}</span>
                       <span className={styles.personMeta}>
-                        {/* The job title is hidden below 1024 px; the record type keeps linked records apart. */}
+                        {/* The job title is hidden below 1024 px; the record type (when shown) keeps linked records apart. */}
                         {p.jobTitle && (
                           <span className={styles.jobTitle}>
                             {p.jobTitle}
-                            {p.type ? " · " : ""}
+                            {typeOf(p) ? " · " : ""}
                           </span>
                         )}
-                        {formatPersonType(p.type)}
+                        {typeOf(p)}
                       </span>
                     </th>
                     {visibleSkills.map((d) => {

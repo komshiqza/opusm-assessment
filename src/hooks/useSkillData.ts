@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadAssignments, loadCertificates, loadPersons, loadScale, loadSkillDefinitions } from "@/lib/skills/repository";
 import type { Assignment, Certificate, Person, ProficiencyScale, SkillDefinition } from "@/lib/skills/types";
 import { toUserMessage } from "@/lib/errors";
+import { createLatestLoader } from "@/lib/latestLoader";
 
 export interface SkillData {
   persons: Person[];
@@ -20,8 +21,12 @@ export interface SkillDataState {
   /** a reload after a change is running (the old data stays visible) */
   refreshing: boolean;
   error: string | null;
-  /** Reloads everything from FSM (5-6 requests in total, independent of the number of persons). */
-  reload: () => Promise<void>;
+  /**
+   * Reloads everything from FSM (5-6 requests in total, independent of the number of persons).
+   * Resolves to false when the reload failed: the screen then still shows the old data, and a
+   * dialog that just saved something must say so instead of acting as if the list were current.
+   */
+  reload: () => Promise<boolean>;
   /** `${personId}|${tagId}` → assignment */
   assignmentByCell: Map<string, Assignment>;
   /** skill (assignment) id → certificates, newest first */
@@ -44,37 +49,27 @@ export function useSkillData(): SkillDataState {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Ignores answers of older requests if a newer reload was started meanwhile. */
-  const requestId = useRef(0);
-
   /** Starts a load; answers of older loads are ignored if a newer one was started meanwhile. */
-  const fetchData = useCallback(() => {
-    const id = ++requestId.current;
-    const isLatest = () => id === requestId.current;
-    return loadAll().then(
-      (next) => {
-        if (!isLatest()) return;
-        setData(next);
+  const [fetchData] = useState(() =>
+    createLatestLoader(loadAll, (result) => {
+      if (result.ok) {
+        setData(result.data);
         setError(null);
-        setLoading(false);
-        setRefreshing(false);
-      },
-      (e: unknown) => {
-        if (!isLatest()) return;
-        setError(toUserMessage(e));
-        setLoading(false);
-        setRefreshing(false);
-      },
-    );
-  }, []);
+      } else {
+        setError(toUserMessage(result.error));
+      }
+      setLoading(false);
+      setRefreshing(false);
+    }),
+  );
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(() => {
     setRefreshing(true);
-    await fetchData();
+    return fetchData();
   }, [fetchData]);
 
   const assignmentByCell = useMemo(() => {

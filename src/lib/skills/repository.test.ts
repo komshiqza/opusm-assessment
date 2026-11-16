@@ -5,14 +5,17 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OwnershipError } from "@/lib/fsm/guard";
+import { FSM_TIMEOUT_MS, FsmTimeoutError } from "@/lib/fsm/client";
 import {
   createAssignment,
   createAssignmentWithCertificates,
+  createSkillDefinition,
   uploadCertificates,
   loadCertificateFile,
   deleteAssignment,
   deleteCertificate,
   deleteSkillDefinition,
+  DeleteImpactChangedError,
   updateAssignment,
   updateSkillDefinition,
   uploadCertificate,
@@ -45,6 +48,10 @@ let searchAnswer: (path: string, filter: { field: string; value: unknown }[]) =>
 let attachmentAnswer: unknown = null;
 /** Attachment uploads with these file names fail in the fake FSM. */
 let failingUploads: Set<string>;
+/** Attachment uploads with these file names never get an answer from the fake FSM. */
+let hangingUploads: Set<string>;
+/** Skill Service writes to this path never get an answer from the fake FSM (e.g. "skill/v2/skills"). */
+let hangingWrite: string | null = null;
 /** Answer of bulk (v2) writes; default: every item succeeded. */
 let bulkAnswer: ((path: string, method: string, body: unknown) => { hasErrors: boolean; results: unknown[] } | null) = () => null;
 
@@ -59,6 +66,8 @@ beforeEach(() => {
   searchAnswer = () => [];
   attachmentAnswer = null;
   failingUploads = new Set();
+  hangingUploads = new Set();
+  hangingWrite = null;
   bulkAnswer = () => null;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input, "http://localhost");
@@ -82,11 +91,17 @@ beforeEach(() => {
       return attachmentAnswer ? json({ data: [{ attachment: attachmentAnswer }] }) : json({ error: "not found" }, 404);
     }
     if (path === "skill/v1/scales" && method === "POST") return json("EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE");
+    if (path === hangingWrite) {
+      return new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+    }
     if (path.startsWith("skill/v2/")) {
       return json(bulkAnswer(path, method, body) ?? { hasErrors: false, results: [{ status: 200, resource: { id: SKILL, ...body?.[0] } }] }, 207);
     }
     if (path.startsWith("data/v4/Attachment") && method === "POST") {
       if (failingUploads.has(body.fileName)) return json({ error: "CA-999", message: "CA-999: simulated upload failure" }, 500);
+      if (hangingUploads.has(body.fileName)) {
+        return new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+      }
       return json({ data: [{ attachment: { id: ATTACHMENT, fileName: body.fileName, type: body.type, object: { objectId: SKILL, objectType: "SKILL" } } }] });
     }
     return json({});
@@ -105,11 +120,31 @@ const tagNamed = (name: string) => (path: string) => (path === "skill/v1/tags/se
 const skillOfTag = (name: string) => (path: string) =>
   path === "skill/v1/skills/search" ? [{ id: SKILL, tagId: OWN_TAG, tagName: name, technicianId: PERSON }] : [];
 const pdf = () => new File(["%PDF-1.4 dummy"], "cert.pdf", { type: "application/pdf" });
+/** What the user confirmed in the delete dialog when the skill was not in use. */
+const NOTHING_CONFIRMED = { skillIds: [], certificateIds: [] };
 
 describe("guard refuses writes to data that is not ours (and sends nothing)", () => {
   it.each(["Gasnetz-Anschluss", "jdoe::Welding"])("delete skill definition %j", async (name) => {
     searchAnswer = tagNamed(name);
-    await expect(deleteSkillDefinition(DEMO_TAG)).rejects.toThrow(OwnershipError);
+    await expect(deleteSkillDefinition(DEMO_TAG, NOTHING_CONFIRMED)).rejects.toThrow(OwnershipError);
+    expect(writes()).toEqual([]);
+  });
+
+  it("create a skill whose name exists in FSM meanwhile (the list in the dialog may be out of date)", async () => {
+    searchAnswer = (path) => (path === "skill/v1/tags/search" ? [{ id: OWN_TAG, name: "komshiqza::Welding" }] : []);
+    await expect(createSkillDefinition("welding", "")).rejects.toThrow(/already exists/);
+    expect(writes()).toEqual([]);
+  });
+
+  it("rename a skill to the name of another skill created meanwhile", async () => {
+    const OTHER = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+    searchAnswer = (path, filter) => {
+      if (path !== "skill/v1/tags/search") return [];
+      const own = { id: OWN_TAG, name: "komshiqza::First aid" };
+      if (filter.some((f) => f.field === "id")) return [own];
+      return [own, { id: OTHER, name: "komshiqza::Welding" }];
+    };
+    await expect(updateSkillDefinition(OWN_TAG, "Welding", "")).rejects.toThrow(/already exists/);
     expect(writes()).toEqual([]);
   });
 
@@ -156,6 +191,26 @@ describe("guard refuses writes to data that is not ours (and sends nothing)", ()
 });
 
 describe("own data", () => {
+  it("does not send a level that was not touched, so FSM keeps the stored one", async () => {
+    searchAnswer = skillOfTag("komshiqza::Welding");
+    await updateAssignment(SKILL, { startDate: "2026-01-01", endDate: "2027-01-01", proficiencyId: undefined });
+    const [patch] = writes();
+    expect(patch.method).toBe("PATCH");
+    expect(patch.body).not.toHaveProperty("proficiencyId");
+  });
+
+  it("sends null to clear the level when the user picked 'No level' (measured: FSM then stores no level)", async () => {
+    searchAnswer = skillOfTag("komshiqza::Welding");
+    await updateAssignment(SKILL, { startDate: "2026-01-01", endDate: "2027-01-01", proficiencyId: null });
+    expect(writes()[0].body).toMatchObject({ proficiencyId: null });
+  });
+
+  it("sends the level the user picked", async () => {
+    searchAnswer = skillOfTag("komshiqza::Welding");
+    await updateAssignment(SKILL, { startDate: "2026-01-01", endDate: null, proficiencyId: "LEVEL" });
+    expect(writes()[0].body).toMatchObject({ proficiencyId: "LEVEL" });
+  });
+
   it("deletes a skill definition in the order certificates → assignments → tag", async () => {
     queryAnswer = (sql) =>
       sql.includes("FROM Attachment a WHERE") ? [{ a: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] : [];
@@ -165,12 +220,49 @@ describe("own data", () => {
       return [];
     };
 
-    await expect(deleteSkillDefinition(OWN_TAG)).resolves.toEqual({ assignments: 1, certificates: 1 });
+    await expect(deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [ATTACHMENT] })).resolves.toEqual({ assignments: 1, certificates: 1 });
     expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([
       `DELETE data/v4/Attachment/${ATTACHMENT}`,
       "DELETE skill/v2/skills",
       "DELETE skill/v2/tags",
     ]);
+  });
+
+  it("deletes nothing and reports the new numbers when FSM has more than the user confirmed", async () => {
+    const SECOND = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+    searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      // Someone assigned the skill once more after the dialog counted 1 assignment.
+      if (path === "skill/v1/skills/search") return [SKILL, SECOND].map((id) => ({ id, tagId: OWN_TAG, tagName: "komshiqza::Welding" }));
+      return [];
+    };
+    queryAnswer = (sql) =>
+      sql.includes("FROM Attachment a WHERE") ? [{ a: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] : [];
+
+    const attempt = deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [ATTACHMENT] });
+    await expect(attempt).rejects.toBeInstanceOf(DeleteImpactChangedError);
+    await expect(attempt).rejects.toMatchObject({ impact: { assignments: 2, certificates: 1 } });
+    expect(writes()).toEqual([]);
+  });
+
+  it("also stops when a certificate was added after the user confirmed", async () => {
+    searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
+      return [];
+    };
+    queryAnswer = (sql) =>
+      sql.includes("FROM Attachment a WHERE") ? [{ a: { id: ATTACHMENT, fileName: "a.pdf", type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } }] : [];
+
+    await expect(deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [] })).rejects.toBeInstanceOf(DeleteImpactChangedError);
+    expect(writes()).toEqual([]);
+  });
+
+  it("goes ahead when FSM has the same or less than the user confirmed", async () => {
+    searchAnswer = (path) => (path === "skill/v1/tags/search" ? [{ id: OWN_TAG, name: "komshiqza::Welding" }] : []);
+    // The one confirmed assignment was removed meanwhile: only the tag is left to delete.
+    await expect(deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [ATTACHMENT] })).resolves.toEqual({ assignments: 0, certificates: 0 });
+    expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual(["DELETE skill/v2/tags"]);
   });
 
   it("removing an assignment also deletes a certificate that was uploaded while the removal ran", async () => {
@@ -207,7 +299,7 @@ describe("own data", () => {
     bulkAnswer = (path) =>
       path === "skill/v2/skills" ? { hasErrors: true, results: [{ status: 500, error: { detail: "Simulated FSM failure" } }] } : null;
 
-    await expect(deleteSkillDefinition(OWN_TAG)).rejects.toThrow(/Simulated FSM failure.*1 certificate/);
+    await expect(deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [ATTACHMENT] })).rejects.toThrow(/Simulated FSM failure.*1 certificate/);
     // the tag itself was not touched after the failure
     expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([`DELETE data/v4/Attachment/${ATTACHMENT}`, "DELETE skill/v2/skills"]);
   });
@@ -224,7 +316,7 @@ describe("own data", () => {
         ? { hasErrors: true, results: [{ status: 200, resource: { id: SKILL } }, { status: 500, error: { detail: "Second assignment failed" } }] }
         : null;
 
-    await expect(deleteSkillDefinition(OWN_TAG)).rejects.toThrow(/Second assignment failed.*1 assignment\b/);
+    await expect(deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL, SECOND], certificateIds: [] })).rejects.toThrow(/Second assignment failed.*1 assignment\b/);
   });
 
   it("deletes an own certificate with exactly one request", async () => {
@@ -285,6 +377,7 @@ describe("assign and upload certificates in one step", () => {
     expect(result.assignment.id).toBe(SKILL);
     expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "b.pdf", "c.pdf"]);
     expect(result.failed).toEqual([]);
+    expect(result.unknown).toEqual([]);
   });
 
   it("keeps the assignment when the 2nd of 3 uploads fails, reports it, and a retry uploads it", async () => {
@@ -299,6 +392,37 @@ describe("assign and upload certificates in one step", () => {
     const retry = await uploadCertificates(result.assignment.id, result.failed.map((f) => f.file));
     expect(retry).toMatchObject({ failed: [] });
     expect(steps()).toEqual(["upload b.pdf"]);
+  });
+
+  it("lists an upload FSM did not answer as unknown, not as failed, so it is not retried blindly", async () => {
+    vi.useFakeTimers();
+    try {
+      hangingUploads = new Set(["b.pdf"]);
+      const pending = createAssignmentWithCertificates(OWN_TAG, PERSON, input, files);
+      await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+      const result = await pending;
+      expect(result.uploaded.map((c) => c.fileName)).toEqual(["a.pdf", "c.pdf"]);
+      expect(result.failed).toEqual([]);
+      expect(result.unknown.map((f) => [f.file.name, f.error])).toEqual([["b.pdf", expect.stringContaining("may have been saved")]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uploads nothing and reports an unknown result when FSM does not answer the create", async () => {
+    vi.useFakeTimers();
+    try {
+      hangingWrite = "skill/v2/skills";
+      const pending = createAssignmentWithCertificates(OWN_TAG, PERSON, input, files).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(FSM_TIMEOUT_MS);
+      const error = await pending;
+      expect(error).toBeInstanceOf(FsmTimeoutError);
+      expect((error as FsmTimeoutError).write).toBe(true);
+      // The dialog keeps the picked files: no upload was sent, so none can be lost or doubled.
+      expect(steps()).toEqual(["POST skill/v2/skills"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uploads nothing when creating the assignment fails", async () => {
