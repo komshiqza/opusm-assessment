@@ -43,7 +43,12 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const [to, setTo] = useState(assignment?.endDate ?? "");
   const [busy, setBusy] = useState(false);
   /** Same as `busy`, set synchronously: a fast second click cannot start a second save. */
-  const busyRef = useRef(false);
+  /**
+   * One synchronous lock for every operation of this dialog and its certificate section (save,
+   * retry, checking picked files, uploading). Checked instantly by Save, Retry, Remove, Cancel and
+   * closing, so nothing can slip in before React has re-rendered the disabled buttons.
+   */
+  const operationRef = useRef(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -60,7 +65,6 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
   const [uploading, setUploading] = useState(false);
   /** Picked files are being checked (first bytes): Save must wait, or they would be left out. */
   const [inspecting, setInspecting] = useState(false);
-  const inspectingRef = useRef(false);
   const locked = busy || uploading || inspecting;
 
   // The picker's value is always in valueFormat (YYYY-MM-DD) or, if the user typed nonsense, that text.
@@ -71,8 +75,8 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
 
   /** Runs one save or retry at a time and keeps the dialog locked meanwhile. */
   const runLocked = async (work: () => Promise<void>) => {
-    if (busyRef.current || inspectingRef.current) return;
-    busyRef.current = true;
+    if (operationRef.current) return;
+    operationRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -80,7 +84,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     } catch (e) {
       setError(toUserMessage(e));
     } finally {
-      busyRef.current = false;
+      operationRef.current = false;
       setBusy(false);
       setProgress(null);
     }
@@ -131,7 +135,8 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     });
 
   const pickFiles = async (files: File[]) => {
-    inspectingRef.current = true;
+    if (operationRef.current) return;
+    operationRef.current = true;
     setInspecting(true);
     setProgress("Checking files…");
     try {
@@ -142,7 +147,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
     } catch (e) {
       setPickProblems([toUserMessage(e)]);
     } finally {
-      inspectingRef.current = false;
+      operationRef.current = false;
       setInspecting(false);
       setProgress(null);
       setPickerKey((k) => k + 1);
@@ -156,7 +161,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
       <Dialog
         open
         headerText={assignment ? `${definition.name}: ${person.name}` : `Assign ${definition.name}`}
-        onBeforeClose={(e) => locked && e.preventDefault()}
+        onBeforeClose={(e) => (locked || operationRef.current) && e.preventDefault()}
         onClose={onClose}
         className={styles.dialog}
         footer={
@@ -167,7 +172,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                 <Text className={styles.muted}>{progress}</Text>
               ) : (
                 assignment && (
-                  <Button design="Transparent" icon="delete" onClick={() => setConfirmRemove(true)} disabled={locked}>
+                  <Button design="Transparent" icon="delete" onClick={() => !operationRef.current && setConfirmRemove(true)} disabled={locked}>
                     Remove assignment
                   </Button>
                 )
@@ -182,7 +187,7 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
                       ? `Assign and upload ${pendingFiles.length} file${pendingFiles.length > 1 ? "s" : ""}`
                       : "Assign"}
                 </Button>
-                <Button design="Transparent" onClick={onClose} disabled={locked}>
+                <Button design="Transparent" onClick={() => !operationRef.current && onClose()} disabled={locked}>
                   {failed.length ? "Close" : "Cancel"}
                 </Button>
               </>
@@ -286,7 +291,13 @@ export function AssignmentDialog({ person, definition, state, onClose }: Assignm
             )}
 
             {assignment ? (
-              <CertificateSection assignmentId={assignment.id} certificates={certificates} onChanged={state.reload} onBusyChange={setUploading} />
+              <CertificateSection
+                assignmentId={assignment.id}
+                certificates={certificates}
+                onChanged={state.reload}
+                onBusyChange={setUploading}
+                operationRef={operationRef}
+              />
             ) : (
               <section className={styles.certificates} aria-labelledby="new-certificates-title">
                 <Label id="new-certificates-title">Certificates (optional)</Label>

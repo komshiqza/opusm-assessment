@@ -19,6 +19,8 @@ interface CertificateSectionProps {
   onChanged: () => Promise<void>;
   /** Tells the dialog that uploads are running, so it can block removing the assignment meanwhile. */
   onBusyChange: (busy: boolean) => void;
+  /** The dialog's synchronous operation lock: an upload only starts when nothing else runs. */
+  operationRef: { current: boolean };
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -26,7 +28,7 @@ const TYPE_ICON: Record<string, string> = {
   JPEG: "attachment-photo",
   PNG: "attachment-photo",
 };
-export function CertificateSection({ assignmentId, certificates, onChanged, onBusyChange }: CertificateSectionProps) {
+export function CertificateSection({ assignmentId, certificates, onChanged, onBusyChange, operationRef }: CertificateSectionProps) {
   const toast = useToast();
   const [progress, setProgress] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -37,11 +39,18 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onBu
 
   const upload = async (files: File[]) => {
     // Busy from the first moment (also while the files are checked), so nothing else can start.
+    if (operationRef.current) {
+      setInputKey((k) => k + 1);
+      return;
+    }
+    operationRef.current = true;
     onBusyChange(true);
     setProgress("Checking files…");
     try {
       const { valid, problems } = await splitCertificateFiles(files);
-      const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) => setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`));
+      const outcome = await uploadCertificates(assignmentId, valid, (file, i, total) =>
+        setProgress(`Uploading ${file.name} (${i + 1} of ${total})…`),
+      );
       setErrors([...problems, ...outcome.failed.map((f) => `${f.file.name}: ${f.error}`)]);
       const uploaded = outcome.uploaded.length;
       if (uploaded) {
@@ -54,6 +63,7 @@ export function CertificateSection({ assignmentId, certificates, onChanged, onBu
     } finally {
       setProgress(null);
       setInputKey((k) => k + 1);
+      operationRef.current = false;
       onBusyChange(false);
     }
   };
