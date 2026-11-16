@@ -118,6 +118,21 @@ describe("assign one skill to several persons", () => {
     expect(creates()).toEqual([people[0]]);
   });
 
+  it.each([502, 503, 504])("a create that ends in %i after FSM saved it (proxy lost the answer) is checked and reported as assigned", async (status) => {
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      const response = await base(input, init);
+      if (String(input).includes("skill/v2/skills") && (init.method ?? "GET").toUpperCase() === "POST") {
+        arrives = new Set([people[0]]); // FSM saved it, but the proxy's connection to FSM broke
+        return new Response(JSON.stringify({ error: "socket hang up", code: "UPSTREAM" }), { status });
+      }
+      return response;
+    });
+    const [result] = await bulkAssign(OWN_TAG, [people[0]], input);
+    expect(result.result).toBe("assigned");
+    expect(creates()).toEqual([people[0]]);
+  });
+
   it("a timed-out create whose check fails stays 'not confirmed' and is only checked again", async () => {
     vi.useFakeTimers();
     try {

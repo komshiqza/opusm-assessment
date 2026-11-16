@@ -158,26 +158,48 @@ describe("own data", () => {
     expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual(["DELETE skill/v2/tags"]);
   });
 
-  it("removing an assignment also deletes a certificate that was uploaded while the removal ran", async () => {
-    fsm.searchAnswer = skillOfTag("komshiqza::Welding");
-    let skillDeleted = false;
-    const LATE = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
-    fsm.bulkAnswer = (path, method) => {
-      if (path === "skill/v2/skills" && method === "DELETE") skillDeleted = true;
-      return null;
-    };
-    // Before the skill is deleted FSM lists one certificate; afterwards a second one shows up (late upload).
+  /**
+   * A certificate uploaded (e.g. in another tab) after the first listing: FSM shows it from the second
+   * listing on. It must be deleted while its assignment still exists, because the server refuses to
+   * delete an attachment whose skill is gone ("not yours"), which would leave it orphaned.
+   */
+  const LATE = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+  const lateUpload = () => {
+    let listings = 0;
+    const cert = (id: string) => ({ a: { id, fileName: `${id}.pdf`, type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } });
     fsm.queryAnswer = (sql) => {
       if (!sql.includes("FROM Attachment a WHERE")) return [];
-      const cert = (id: string) => ({ a: { id, fileName: `${id}.pdf`, type: "PDF", object: { objectId: SKILL, objectType: "SKILL" } } });
-      return skillDeleted ? [cert(LATE)] : [cert(ATTACHMENT)];
+      listings++;
+      return listings === 1 ? [cert(ATTACHMENT)] : [cert(ATTACHMENT), cert(LATE)];
     };
+  };
+
+  it("removing an assignment deletes a late certificate before the assignment itself", async () => {
+    fsm.searchAnswer = skillOfTag("komshiqza::Welding");
+    lateUpload();
 
     await deleteAssignment(SKILL);
     expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([
       `DELETE data/v4/Attachment/${ATTACHMENT}`,
-      "DELETE skill/v2/skills",
       `DELETE data/v4/Attachment/${LATE}`,
+      "DELETE skill/v2/skills",
+    ]);
+  });
+
+  it("deleting a skill deletes a late certificate before the assignments and the tag", async () => {
+    fsm.searchAnswer = (path) => {
+      if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+      if (path === "skill/v1/skills/search") return [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding" }];
+      return [];
+    };
+    lateUpload();
+
+    await expect(deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [ATTACHMENT] })).resolves.toEqual({ assignments: 1, certificates: 2 });
+    expect(writes().map((c) => `${c.method} ${c.path}`)).toEqual([
+      `DELETE data/v4/Attachment/${ATTACHMENT}`,
+      `DELETE data/v4/Attachment/${LATE}`,
+      "DELETE skill/v2/skills",
+      "DELETE skill/v2/tags",
     ]);
   });
 

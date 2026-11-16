@@ -311,7 +311,7 @@ export const de: Record<MessageKey, string> = {
   "bulk.alreadyHas": "Bereits zugewiesen",
   "bulk.assignTo": "{n} zuweisen",
   "bulk.chooseFirst": "Wählen Sie eine Qualifikation und die Personen aus.",
-  "bulk.overLimit": "Höchstens {max} Personen gleichzeitig (zur Zuweisung ausgewählt: {n}).",
+  "bulk.overLimit": "Höchstens {max} Personen gleichzeitig (ausgewählt: {n}).",
   "bulk.preview": "{n} zuweisen, {skip} überspringen (bereits zugewiesen). Hier keine Zertifikate: diese danach pro Person hinzufügen.",
   "bulk.progress": "Zuweisung {i} von {total}…",
   "bulk.tryingAgain": "Neuer Versuch…",

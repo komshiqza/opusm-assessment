@@ -64,6 +64,27 @@ describe("a write whose connection breaks (no answer, but FSM may have saved it)
     expect(toUserMessage(error)).toMatch(/could not be reached/);
   });
 
+  it.each([502, 503, 504])("a write answered with %i (the proxy lost FSM) is an unknown result too", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "socket hang up", code: "UPSTREAM" }), { status })));
+    const error = await skillApi("v2/skills", { method: "POST", body: [{ tagId: "X" }] }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FsmTimeoutError);
+    expect((error as FsmTimeoutError).write).toBe(true);
+  });
+
+  it("a write the proxy could not even start (no token, no config) stays a plain failure", async () => {
+    for (const [status, code] of [[502, "AUTH"], [500, "CONFIG"]] as const) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "token failed", code }), { status })));
+      const error = await skillApi("v2/skills", { method: "POST", body: [{ tagId: "X" }] }).catch((e: unknown) => e);
+      expect(error).not.toBeInstanceOf(FsmTimeoutError);
+    }
+  });
+
+  it("a read answered with 502 is a plain failure: just try again", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "socket hang up", code: "UPSTREAM" }), { status: 502 })));
+    const error = await skillSearch("v1/skills").catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(FsmTimeoutError);
+  });
+
   it("a read whose connection breaks just asks to try again", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
     const error = await skillSearch("v1/skills").catch((e: unknown) => e);

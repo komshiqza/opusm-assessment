@@ -312,7 +312,7 @@ export const en = {
   "bulk.alreadyHas": "Already has it",
   "bulk.assignTo": "Assign to {n}",
   "bulk.chooseFirst": "Choose a skill and the persons.",
-  "bulk.overLimit": "At most {max} persons at once (selected to assign: {n}).",
+  "bulk.overLimit": "At most {max} persons at once (selected: {n}).",
   "bulk.preview": "Assign to {n}, skip {skip} who already have it. No certificates here: add them per person afterwards.",
   "bulk.progress": "Assigning {i} of {total}…",
   "bulk.tryingAgain": "Trying again…",

@@ -72,12 +72,25 @@ async function call<T>(path: string, init: RequestInit & { params?: Record<strin
   const qs = params ? `?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))}` : "";
   const method = (rest.method ?? "GET").toUpperCase();
   const requestInit = { ...rest, headers: { "Content-Type": "application/json", ...(rest.headers ?? {}) } };
-  return fetchWithTimeout(`${PROXY}/${path}${qs}`, requestInit, !isRead(path, method), async (res) => {
+  const write = !isRead(path, method);
+  return fetchWithTimeout(`${PROXY}/${path}${qs}`, requestInit, write, async (res) => {
     const text = await res.text();
     const data = text ? safeJson(text) : null;
+    if (write && answerLost(res.status, data)) throw new FsmTimeoutError(true, "connection");
     if (!res.ok) throw toFsmError(res.status, text, data);
     return data as T;
   });
+}
+
+/**
+ * A gateway error (502/503/504) on a write: the proxy or a gateway in front of FSM lost the answer,
+ * so FSM may have saved the write. Not when the proxy itself stopped before sending (no token or no
+ * configuration: codes AUTH and CONFIG), then nothing reached FSM.
+ */
+function answerLost(status: number, data: unknown): boolean {
+  if (status !== 502 && status !== 503 && status !== 504) return false;
+  const code = data && typeof data === "object" ? (data as Record<string, unknown>).code : undefined;
+  return code !== "AUTH" && code !== "CONFIG";
 }
 
 /** FSM's own message from an error response (Data/Query API: `message`/`error`, proxy: `error`). */

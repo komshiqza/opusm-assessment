@@ -159,6 +159,22 @@ describe("a write FSM did not answer is checked once in FSM, never repeated auto
     expect(uploads()).toEqual(["a.pdf", "b.pdf"]);
   });
 
+  it("upload: the proxy answers 502 after FSM stored the file → checked and uploaded, never sent again", async () => {
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      const response = await base(input, init); // the fake FSM stores the file
+      const body = init.body ? JSON.parse(String(init.body)) : {};
+      if (String(input).includes("data/v4/Attachment") && init.method === "POST" && body.fileName === "b.pdf") {
+        return new Response(JSON.stringify({ error: "socket hang up", code: "UPSTREAM" }), { status: 502 });
+      }
+      return response;
+    });
+    const outcome = await uploadCertificates(SKILL, [a, b]);
+    expect(outcome.confirmedLate.map((f) => f.name)).toEqual(["b.pdf"]);
+    expect(outcome.failed).toEqual([]);
+    expect(uploads()).toEqual(["a.pdf", "b.pdf"]);
+  });
+
   it("upload: FSM does not have the file → not uploaded; only the user's retry sends it again", async () => {
     fsm.hangingUploads = new Set(["b.pdf"]);
     const outcome = await uploadWithTimeout([a, b]);

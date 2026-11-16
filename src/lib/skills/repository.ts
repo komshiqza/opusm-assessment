@@ -245,10 +245,10 @@ export async function deleteSkillDefinition(tagId: string, confirmed: Pick<Delet
       done.certificates++;
     }
     if (skillIds.length) {
+      done.certificates += await deleteLateCertificates(skillIds);
       const res = await skillApi<BulkResponse>("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) });
       done.assignments = res.results.filter((r) => r.status < 400).length; // counted before a partial failure throws
       assertBulkOk(res);
-      done.certificates += await deleteLateCertificates(skillIds);
     }
     assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
     return done;
@@ -261,8 +261,9 @@ export async function deleteSkillDefinition(tagId: string, confirmed: Pick<Delet
 type BulkResponse = Parameters<typeof assertBulkOk>[0];
 
 /**
- * A certificate uploaded (e.g. from another browser tab) after we listed the certificates but
- * before the skill was deleted would be left without its skill. One more look catches it.
+ * A certificate uploaded (e.g. from another browser tab) after we listed the certificates would be
+ * left without its skill. One more look catches it, while the assignments still exist: once a skill
+ * is deleted, the server no longer accepts deleting its attachments (they are no longer "ours").
  */
 async function deleteLateCertificates(skillIds: string[]): Promise<number> {
   const late = await loadCertificates(skillIds);
@@ -353,9 +354,9 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
       await fsmDelete("Attachment", c.id);
       done.certificates++;
     }
+    done.certificates += await deleteLateCertificates([assignmentId]);
     assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: [{ id: assignmentId }] }));
     done.assignments = 1;
-    await deleteLateCertificates([assignmentId]);
   } catch (e) {
     throw withProgress(e, done);
   }

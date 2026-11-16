@@ -103,8 +103,9 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
   const assign = () =>
     run(async () => {
       if (!definition || dateError || plan.toAssign.length === 0 || plan.overLimit) return;
-      const done = await bulkAssign(definition.id, plan.toAssign, input, (i, total) => setProgress(t("bulk.progress", { i: i + 1, total })));
-      setResults([...done, ...plan.skip.map((personId): BulkResult => ({ personId, result: "skipped" }))]);
+      // Also the persons shown as having the skill: FSM decides, and skips them without a write.
+      const done = await bulkAssign(definition.id, plan.send, input, (i, total) => setProgress(t("bulk.progress", { i: i + 1, total })));
+      setResults(done);
       const assigned = done.filter((r) => r.result === "assigned").length;
       if (assigned) toast(tn("bulk.toastAssigned", assigned, { skill: definition.name }));
     });
@@ -279,7 +280,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
               {!definition
                 ? t("bulk.chooseFirst")
                 : plan.overLimit
-                  ? t("bulk.overLimit", { max: BULK_LIMIT, n: plan.toAssign.length })
+                  ? t("bulk.overLimit", { max: BULK_LIMIT, n: plan.send.length })
                   : t("bulk.preview", { n: plan.toAssign.length, skip: plan.skip.length })}
             </MessageStrip>
             {error && <MessageStrip design="Negative" hideCloseButton>{error}</MessageStrip>}
