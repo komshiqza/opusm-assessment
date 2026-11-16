@@ -23,7 +23,7 @@ import {
   type TabKey,
 } from "@/lib/tabOrder";
 import { NARROW_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
-import { CANDIDATE_ID_VALID, NAME_PREFIX } from "@/lib/candidate";
+import { CANDIDATE_ID_VALID } from "@/lib/candidate";
 import { useSkillData } from "@/hooks/useSkillData";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { ToastProvider } from "./common/Toast";
@@ -174,8 +174,6 @@ export function SkillManagementApp() {
                   Reset tab order
                 </Button>
               )}
-              <br />
-              Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data from FSM.
             </p>
           </>
         )}

@@ -23,7 +23,6 @@ import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, statusText } from "./statusDisplay";
-import { NoJobTitleTag } from "@/components/common/NoJobTitleTag";
 import styles from "./SkillMatrix.module.css";
 
 type StatusFilter = "all" | AssignmentStatus;
@@ -192,19 +191,10 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
             All person records ({data.persons.length})
           </SegmentedButtonItem>
         </SegmentedButton>
-        <Text className={styles.legend}>
-          {showAllRecords
-            ? "Includes the linked Employee records and people without a job title."
-            : `One row per technician: SAP links a person's records, and the ERP user record is the person.${extraCount ? " People without a job title who hold our skills are added and labelled." : ""}`}
-        </Text>
+        {showAllRecords && <Text className={styles.legend}>Includes the linked Employee records and people without a job title.</Text>}
       </div>
 
       <div className={styles.summary} aria-live="polite">
-        <Text>
-          {visiblePersons.length} of {rows.length} {showAllRecords ? "person records" : extraCount ? "rows" : "technicians"}
-          {!showAllRecords && extraCount > 0 && ` (${technicianCount} technicians + ${extraCount} without a job title who hold our skills)`} ·{" "}
-          {visibleSkills.length} skills
-        </Text>
         {(["expiring", "expired", "valid", "upcoming"] as const)
           .filter((s) => s !== "upcoming" || counts.upcoming > 0)
           .map((s) => (
@@ -237,7 +227,6 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
               <div className={styles.cardHead}>
                 <span className={styles.personName}>{p.name}</span>
                 <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
-                {withoutJobTitle.has(p.id) && <NoJobTitleTag />}
               </div>
               <ul className={styles.cardSkills}>
                 {visibleSkills
@@ -295,7 +284,6 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
                   <th scope="row" className={styles.personCell}>
                     <span className={styles.personName}>{p.name}</span>
                     <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
-                    {withoutJobTitle.has(p.id) && <NoJobTitleTag />}
                   </th>
                   {visibleSkills.map((d) => {
                     const info = cellInfo(p, d);
