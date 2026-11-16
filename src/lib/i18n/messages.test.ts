@@ -28,7 +28,7 @@ describe("English and German texts", () => {
 describe("t and tn", () => {
   it("fill placeholders and pick the plural form", () => {
     expect(t("status.expiresOn", { date: "11.12.2026" }, "en")).toBe("Expires 11.12.2026");
-    expect(t("status.expiresOn", { date: "11.12.2026" }, "de")).toBe("Läuft ab 11.12.2026");
+    expect(t("status.expiresOn", { date: "11.12.2026" }, "de")).toBe("Läuft am 11.12.2026 ab");
     expect(tn("expiry.daysLeft", 1, undefined, "de")).toBe("Noch 1 Tag");
     expect(tn("expiry.daysLeft", 5, undefined, "en")).toBe("5 days left");
   });
