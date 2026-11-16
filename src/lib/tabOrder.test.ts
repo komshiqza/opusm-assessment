@@ -52,4 +52,26 @@ describe("storage", () => {
     expect(() => resetTabOrder()).not.toThrow();
     expect(parseTabOrder(readStoredTabOrder())).toEqual(DEFAULT_TAB_ORDER);
   });
+
+  it("uses the new order when only writing fails (reading still works)", () => {
+    const values = new Map<string, string>([["skill-management.tab-order", '["catalogue","matrix","expiry","find"]']]);
+    fakeWindow({
+      getItem: (k) => values.get(k) ?? null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: (k) => void values.delete(k),
+    });
+    saveTabOrder(["find", "matrix", "expiry", "catalogue"]);
+    expect(parseTabOrder(readStoredTabOrder())).toEqual(["find", "matrix", "expiry", "catalogue"]);
+  });
+
+  it("treats a missing key as a reset done in another window", () => {
+    const values = new Map<string, string>();
+    fakeWindow({ getItem: (k) => values.get(k) ?? null, setItem: (k, v) => void values.set(k, v), removeItem: (k) => void values.delete(k) });
+    saveTabOrder(["find", "matrix", "expiry", "catalogue"]);
+    values.clear(); // another page pressed "Reset tab order"
+    expect(parseTabOrder(readStoredTabOrder())).toEqual(DEFAULT_TAB_ORDER);
+  });
 });
+

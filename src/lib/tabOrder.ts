@@ -11,7 +11,9 @@ export const DEFAULT_TAB_ORDER: TabKey[] = ["matrix", "expiry", "find", "catalog
 
 const STORAGE_KEY = "skill-management.tab-order";
 const CHANGE_EVENT = "skill-management:tab-order";
+/** This page's order when it could not be saved; used only while saving fails. */
 let memory: string | null = null;
+let saveFailed = false;
 
 /** Any stored value → a valid order: known keys once each, missing ones appended in default order. */
 export function parseTabOrder(raw: string | null | undefined): TabKey[] {
@@ -43,8 +45,10 @@ export function isDefaultTabOrder(order: TabKey[]): boolean {
 // --- Store for useSyncExternalStore -------------------------------------------------------------
 
 export function readStoredTabOrder(): string {
+  if (saveFailed) return memory ?? "";
   try {
-    return window.localStorage.getItem(STORAGE_KEY) ?? memory ?? "";
+    // Storage works: it is the truth. A missing key means default (e.g. reset in another window).
+    return window.localStorage.getItem(STORAGE_KEY) ?? "";
   } catch {
     return memory ?? "";
   }
@@ -63,8 +67,9 @@ export function saveTabOrder(order: TabKey[]): void {
   memory = JSON.stringify(order);
   try {
     window.localStorage.setItem(STORAGE_KEY, memory);
+    saveFailed = false;
   } catch {
-    // blocked storage: the order lives in memory until the page is reloaded
+    saveFailed = true; // blocked storage: the order lives in memory until the page is reloaded
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
@@ -73,8 +78,9 @@ export function resetTabOrder(): void {
   memory = null;
   try {
     window.localStorage.removeItem(STORAGE_KEY);
+    saveFailed = false;
   } catch {
-    // nothing stored
+    saveFailed = true; // cannot remove it: this page shows the default from memory
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
