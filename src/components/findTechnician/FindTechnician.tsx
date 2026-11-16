@@ -21,12 +21,13 @@ import {
 import { checkSkillForJob, matchTechnicians } from "@/lib/domain/jobMatch";
 import { normalizeEndDate, todayIso } from "@/lib/domain/status";
 import { validateValidity } from "@/lib/domain/validation";
-import { selectPersonRows } from "@/lib/domain/persons";
+import { personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
 import { formatDate, formatPersonType } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "@/components/matrix/statusDisplay";
+import { NoJobTitleTag } from "@/components/common/NoJobTitleTag";
 import styles from "./FindTechnician.module.css";
 
 const ANY_LEVEL = "any";
@@ -55,7 +56,8 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
 
   const persons = useMemo(() => selectPersonRows(state.data?.persons ?? [], state.assignedPersonIds, false), [state.data, state.assignedPersonIds]);
   const lookup = (personId: string, skillId: string) => state.assignmentByCell.get(cellKey(personId, skillId));
-  const result = dateError ? null : matchTechnicians(persons, required, lookup, jobDate, today, minLevel);
+  const withoutJobTitle = useMemo(() => personsWithoutJobTitle(state.data?.persons ?? []), [state.data]);
+  const result = dateError ? null : matchTechnicians(persons, required, lookup, jobDate, today, minLevel, (p) => !withoutJobTitle.has(p.id));
 
   /** One cell: how this person's skill looks on the job date. Clicking it opens the assignment. */
   const skillCell = (person: Person, skill: SkillDefinition): ReactNode => {
@@ -100,14 +102,25 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
     );
   };
 
-  const personCell = (p: Person) => (
+  const personCell = (p: Person, technician: boolean) => (
     <TableCell>
       <span className={styles.person}>
         <b>{p.name}</b>
         <span className={styles.muted}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
+        {!technician && <NoJobTitleTag />}
       </span>
     </TableCell>
   );
+
+  /** "2 technicians can do this job on 15.12.2026 (+1 person without a job title)" */
+  const readyHeadline = (ready: { technician: boolean }[]) => {
+    const technicians = ready.filter((r) => r.technician).length;
+    const others = ready.length - technicians;
+    const extra = others ? ` (+${others} ${others === 1 ? "person" : "people"} without a job title)` : "";
+    if (!ready.length) return `Nobody can do this job on ${formatDate(jobDate)}`;
+    if (!technicians) return `No technician can do this job on ${formatDate(jobDate)}${extra}`;
+    return `${technicians} technician${technicians === 1 ? "" : "s"} can do this job on ${formatDate(jobDate)}${extra}`;
+  };
 
   const header = (last: string) => (
     <TableHeaderRow sticky>
@@ -184,16 +197,14 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
               <Title level="H4" style={{ color: result.ready.length ? "var(--sapPositiveTextColor)" : undefined }}>
-                {result.ready.length === 0
-                  ? `Nobody can do this job on ${formatDate(jobDate)}`
-                  : `${result.ready.length} technician${result.ready.length === 1 ? "" : "s"} can do this job on ${formatDate(jobDate)}`}
+                {readyHeadline(result.ready)}
               </Title>
             </div>
             {result.ready.length > 0 && (
               <Table overflowMode="Popin" headerRow={header("Result")}>
-                {result.ready.map(({ person }) => (
+                {result.ready.map(({ person, technician }) => (
                   <TableRow key={person.id} rowKey={person.id}>
-                    {personCell(person)}
+                    {personCell(person, technician)}
                     {required.map((s) => (
                       <TableCell key={s.id}>{skillCell(person, s)}</TableCell>
                     ))}
@@ -215,9 +226,9 @@ export function FindTechnician({ state, onOpen }: FindTechnicianProps) {
             </div>
             {result.almost.length > 0 ? (
               <Table overflowMode="Popin" headerRow={header("Why not")}>
-                {result.almost.map(({ person, reason }) => (
+                {result.almost.map(({ person, reason, technician }) => (
                   <TableRow key={person.id} rowKey={person.id}>
-                    {personCell(person)}
+                    {personCell(person, technician)}
                     {required.map((s) => (
                       <TableCell key={s.id}>{skillCell(person, s)}</TableCell>
                     ))}

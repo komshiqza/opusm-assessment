@@ -17,12 +17,13 @@ import {
 } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, todayIso, type AssignmentStatus } from "@/lib/domain/status";
 import { formatPersonType } from "@/lib/format";
-import { selectPersonRows } from "@/lib/domain/persons";
+import { personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
 import { PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, statusText } from "./statusDisplay";
+import { NoJobTitleTag } from "@/components/common/NoJobTitleTag";
 import styles from "./SkillMatrix.module.css";
 
 type StatusFilter = "all" | AssignmentStatus;
@@ -51,6 +52,10 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
   /** One row per technician by default (see src/lib/domain/persons.ts). */
   const technicianRows = useMemo(() => selectPersonRows(data?.persons ?? [], state.assignedPersonIds, false), [data, state.assignedPersonIds]);
   const rows = showAllRecords ? (data?.persons ?? []) : technicianRows;
+  /** Shown because they hold our skills, but not technicians: labelled in the row (see persons.ts). */
+  const withoutJobTitle = useMemo(() => personsWithoutJobTitle(data?.persons ?? []), [data]);
+  const technicianCount = technicianRows.filter((p) => !withoutJobTitle.has(p.id)).length;
+  const extraCount = technicianRows.length - technicianCount;
   const visiblePersons = rows.filter((p) => {
     if (query && !`${p.name} ${p.jobTitle ?? ""}`.toLowerCase().includes(query)) return false;
     if (statusFilter === "all") return true;
@@ -180,7 +185,8 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
           onSelectionChange={(e) => setShowAllRecords(e.detail.selectedItems[0]?.dataset.key === "all")}
         >
           <SegmentedButtonItem data-key="technicians" selected={!showAllRecords}>
-            Technicians ({technicianRows.length})
+            Technicians ({technicianCount}
+            {extraCount ? ` + ${extraCount}` : ""})
           </SegmentedButtonItem>
           <SegmentedButtonItem data-key="all" selected={showAllRecords}>
             All person records ({data.persons.length})
@@ -189,13 +195,15 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
         <Text className={styles.legend}>
           {showAllRecords
             ? "Includes the linked Employee records and people without a job title."
-            : "One row per technician: SAP links a person's records, and the ERP user record is the person."}
+            : `One row per technician: SAP links a person's records, and the ERP user record is the person.${extraCount ? " People without a job title who hold our skills are added and labelled." : ""}`}
         </Text>
       </div>
 
       <div className={styles.summary} aria-live="polite">
         <Text>
-          {visiblePersons.length} of {rows.length} {showAllRecords ? "person records" : "technicians"} · {visibleSkills.length} skills
+          {visiblePersons.length} of {rows.length} {showAllRecords ? "person records" : extraCount ? "rows" : "technicians"}
+          {!showAllRecords && extraCount > 0 && ` (${technicianCount} technicians + ${extraCount} without a job title who hold our skills)`} ·{" "}
+          {visibleSkills.length} skills
         </Text>
         {(["expiring", "expired", "valid", "upcoming"] as const)
           .filter((s) => s !== "upcoming" || counts.upcoming > 0)
@@ -229,6 +237,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
               <div className={styles.cardHead}>
                 <span className={styles.personName}>{p.name}</span>
                 <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
+                {withoutJobTitle.has(p.id) && <NoJobTitleTag />}
               </div>
               <ul className={styles.cardSkills}>
                 {visibleSkills
@@ -286,6 +295,7 @@ export function SkillMatrix({ state, onOpenCell, onGoToCatalogue }: SkillMatrixP
                   <th scope="row" className={styles.personCell}>
                     <span className={styles.personName}>{p.name}</span>
                     <span className={styles.personMeta}>{[p.jobTitle, formatPersonType(p.type)].filter(Boolean).join(" · ")}</span>
+                    {withoutJobTitle.has(p.id) && <NoJobTitleTag />}
                   </th>
                   {visibleSkills.map((d) => {
                     const info = cellInfo(p, d);

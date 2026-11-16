@@ -95,3 +95,36 @@ describe("matchTechnicians", () => {
     expect(matchTechnicians(persons, [], lookup, JOB, TODAY, null)).toEqual({ ready: [], almost: [], others: 0 });
   });
 });
+
+describe("people without a job title", () => {
+  const tech = { id: "tech", name: "A Technician" };
+  const staff = { id: "staff", name: "Dominic" }; // no job title, holds our skills
+  const notTechnician = (p: { id: string }) => p.id !== "staff";
+
+  it("lists a person without a job title who can do the job, after the technicians", () => {
+    const held: Record<string, ReturnType<typeof assignment>> = { "staff|aid": assignment(), "tech|aid": assignment() };
+    const result = matchTechnicians([staff, tech], [firstAid], (p, s) => held[`${p}|${s}`], JOB, TODAY, null, notTechnician);
+    expect(result.ready.map((r) => [r.person.id, r.technician])).toEqual([
+      ["tech", true],
+      ["staff", false],
+    ]);
+  });
+
+  it("leaves out a person without a job title who has none of the required skills", () => {
+    const held: Record<string, ReturnType<typeof assignment>> = { "staff|heights": assignment() };
+    const result = matchTechnicians([staff], [firstAid], (p, s) => held[`${p}|${s}`], JOB, TODAY, null, notTechnician);
+    expect(result).toEqual({ ready: [], almost: [], others: 0 });
+  });
+
+  it("puts technicians first in the 'almost' list too", () => {
+    const held: Record<string, ReturnType<typeof assignment>> = {
+      "staff|aid": assignment({ endDate: "2026-12-01" }),
+      "tech|aid": assignment({ endDate: "2026-12-01" }),
+    };
+    const result = matchTechnicians([staff, tech], [firstAid], (p, s) => held[`${p}|${s}`], JOB, TODAY, null, notTechnician);
+    expect(result.almost.map((r) => [r.person.id, r.technician])).toEqual([
+      ["tech", true],
+      ["staff", false],
+    ]);
+  });
+});

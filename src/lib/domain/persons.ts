@@ -45,3 +45,17 @@ export function selectPersonRows<P extends PersonRecord>(persons: P[], personIds
   for (const p of persons) if (personIdsWithAssignments.has(p.id)) shown.add(p.id);
   return persons.filter((p) => shown.has(p.id));
 }
+
+/**
+ * Records of people without a job title on any of their linked records (e.g. OPUSm staff accounts).
+ * They are not technicians, but if they hold one of our skills they stay visible, clearly labelled:
+ * the brief asks "which person has which skill", and in an emergency such a person may matter.
+ */
+export function personsWithoutJobTitle(persons: PersonRecord[]): Set<string> {
+  const ids = new Set<string>();
+  for (const group of groupByPhysicalPerson(persons)) {
+    if (group.some((p) => p.jobTitle?.trim())) continue;
+    for (const p of group) ids.add(p.id);
+  }
+  return ids;
+}

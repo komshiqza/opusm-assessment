@@ -45,13 +45,13 @@ export function checkSkillForJob(
 }
 
 export interface JobMatch<P> {
-  /** All required skills count on the job date. */
-  ready: { person: P }[];
+  /** All required skills count on the job date. Technicians first, then people without a job title. */
+  ready: { person: P; technician: boolean }[];
   /**
    * Exactly one required skill is missing or does not count; `reason` says which and why.
    * Skills that exist but do not count (renewal, level) come first, plain "Missing" last.
    */
-  almost: { person: P; reason: string; missing: boolean }[];
+  almost: { person: P; reason: string; missing: boolean; technician: boolean }[];
   /** Persons with two or more gaps (not listed). */
   others: number;
 }
@@ -63,17 +63,23 @@ export function matchTechnicians<P extends { id: string; name: string }, S exten
   jobDate: string,
   today: string,
   minLevel: { level: number; name: string } | null,
+  /** People without a job title are listed after the technicians, and only if they hold a required skill. */
+  isTechnician: (person: P) => boolean = () => true,
 ): JobMatch<P> {
   const result: JobMatch<P> = { ready: [], almost: [], others: 0 };
   if (requiredSkills.length === 0) return result;
   for (const person of persons) {
+    const technician = isTechnician(person);
+    if (!technician && !requiredSkills.some((s) => lookup(person.id, s.id))) continue;
     const gaps = requiredSkills
       .map((s) => checkSkillForJob(lookup(person.id, s.id), s, jobDate, today, minLevel))
       .filter((c) => !c.ok);
-    if (gaps.length === 0) result.ready.push({ person });
-    else if (gaps.length === 1) result.almost.push({ person, reason: gaps[0].reason!, missing: gaps[0].missing });
+    if (gaps.length === 0) result.ready.push({ person, technician });
+    else if (gaps.length === 1) result.almost.push({ person, reason: gaps[0].reason!, missing: gaps[0].missing, technician });
     else result.others++;
   }
-  result.almost.sort((a, b) => Number(a.missing) - Number(b.missing)); // stable: keeps the persons' order within each group
+  // Stable sorts: technicians first; in "almost", renewals before plain gaps; otherwise the persons' order.
+  result.ready.sort((a, b) => Number(b.technician) - Number(a.technician));
+  result.almost.sort((a, b) => Number(b.technician) - Number(a.technician) || Number(a.missing) - Number(b.missing));
   return result;
 }

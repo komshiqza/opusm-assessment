@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countPhysicalPersons, selectPersonRows } from "./persons";
+import { countPhysicalPersons, personsWithoutJobTitle, selectPersonRows } from "./persons";
 
 /** Records as SAP links them: every record's refId is the id of the ERPUSER record (which references itself). */
 const record = (id: string, type: string, refId: string, jobTitle: string | null = "Service Technician") => ({ id, type, refId, jobTitle });
@@ -53,5 +53,15 @@ describe("selectPersonRows (SAP: records linked by refId; the person is the ERPU
 describe("countPhysicalPersons", () => {
   it("counts linked groups, not records", () => {
     expect(countPhysicalPersons(all)).toBe(5);
+  });
+});
+
+describe("personsWithoutJobTitle", () => {
+  it("marks every record of a person whose linked records have no job title", () => {
+    expect([...personsWithoutJobTitle(all)].sort()).toEqual(["dominic", "dominic-emp"]);
+  });
+
+  it("does not mark a person whose job title sits on another linked record", () => {
+    expect(personsWithoutJobTitle(all).has("eva")).toBe(false);
   });
 });
