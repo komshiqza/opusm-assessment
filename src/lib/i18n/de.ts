@@ -173,7 +173,7 @@ export const de: Record<MessageKey, string> = {
   "find.ready_other": "{n} Techniker können diesen Einsatz am {date} übernehmen{extra}",
   "find.result": "Ergebnis",
   "find.canDo": "Kann den Einsatz übernehmen",
-  "find.almostTitle": "Fast geeignet ({n}): eine Qualifikation muss erneuert oder auf die Stufe angehoben werden oder gilt am {date} noch nicht",
+  "find.almostTitle": "Fast geeignet ({n}) am {date}",
   "find.whyNot": "Grund",
   "find.almostNone": "Niemandem fehlt nur eine Erneuerung, eine Stufe oder ein Startdatum.",
   "find.missingThis_one": "1 Person hat diese Qualifikation nicht",
@@ -189,6 +189,7 @@ export const de: Record<MessageKey, string> = {
   "match.endsBefore_other": "{skill} läuft {n} Tage vor dem Einsatz ab",
   "match.validFrom": "{skill} gilt erst ab {date}",
   "match.levelNeeded": "{skill}: {level}, erforderlich: {needed}",
+  "match.andLevel": "{reason}; Stufe {level}, erforderlich: {needed}",
   "match.noLevel": "keine Stufe",
 
   // Catalogue

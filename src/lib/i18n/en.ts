@@ -174,7 +174,7 @@ export const en = {
   "find.ready_other": "{n} technicians can do this job on {date}{extra}",
   "find.result": "Result",
   "find.canDo": "Can do the job",
-  "find.almostTitle": "Almost ({n}): one skill to renew, raise to the level, or that starts too late for {date}",
+  "find.almostTitle": "Almost ({n}) on {date}",
   "find.whyNot": "Why not",
   "find.almostNone": "Nobody is just one renewal, level or start date away.",
   "find.missingThis_one": "1 person doesn't have this skill",
@@ -190,6 +190,7 @@ export const en = {
   "match.endsBefore_other": "{skill} ends {n} days before the job",
   "match.validFrom": "{skill} is valid only from {date}",
   "match.levelNeeded": "{skill}: {level}, {needed} needed",
+  "match.andLevel": "{reason}; level {level}, {needed} needed",
   "match.noLevel": "no level",
 
   // Catalogue

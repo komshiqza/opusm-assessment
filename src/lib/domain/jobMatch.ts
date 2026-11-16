@@ -31,22 +31,67 @@ export function checkSkillForJob(
 ): SkillCheck {
   if (!held) return { ok: false, reason: t("match.missing", { skill: skill.name }), missing: true };
   const end = normalizeEndDate(held.endDate);
+  // Every problem is named: after renewing an expired skill, a level that is too low still stops the person.
+  const dateProblem =
+    end && end < jobDate
+      ? end < today
+        ? t("match.expiredOn", { skill: skill.name, date: formatDate(end) })
+        : tn("match.endsBefore", daysBetween(end, jobDate), { skill: skill.name })
+      : held.startDate && held.startDate > jobDate
+        ? t("match.validFrom", { skill: skill.name, date: formatDate(held.startDate) })
+        : null;
+  const levelTooLow = Boolean(minLevel && (held.proficiencyLevel ?? 0) < minLevel.level);
+  const level = held.proficiencyName ?? t("match.noLevel");
+  if (!dateProblem && !levelTooLow) return { ok: true, reason: null, missing: false };
+  const reason = !levelTooLow
+    ? dateProblem
+    : dateProblem
+      ? t("match.andLevel", { reason: dateProblem, level, needed: minLevel!.name })
+      : t("match.levelNeeded", { skill: skill.name, level, needed: minLevel!.name });
+  return { ok: false, reason, missing: false };
+}
+
+/** The cell in "Find technician": how the skill looks on the job date (status colour and short text). */
+export function jobDayLabel(
+  held: HeldSkill | undefined,
+  check: SkillCheck,
+  jobDate: string,
+  today: string,
+): { status: "none" | "valid" | "expired" | "expiring" | "upcoming"; label: string } {
+  if (!held) return { status: "none", label: t("status.none") };
+  if (check.ok) return { status: "valid", label: t("find.validOnJobDay") };
+  const end = normalizeEndDate(held.endDate);
   if (end && end < jobDate) {
-    if (end < today) return { ok: false, reason: t("match.expiredOn", { skill: skill.name, date: formatDate(end) }), missing: false };
-    const days = daysBetween(end, jobDate);
-    return { ok: false, reason: tn("match.endsBefore", days, { skill: skill.name }), missing: false };
+    return end < today ? { status: "expired", label: t("status.expiredOn", { date: formatDate(end) }) } : { status: "expiring", label: t("find.endsOn", { date: formatDate(end) }) };
   }
-  if (held.startDate && held.startDate > jobDate) {
-    return { ok: false, reason: t("match.validFrom", { skill: skill.name, date: formatDate(held.startDate) }), missing: false };
-  }
-  if (minLevel && (held.proficiencyLevel ?? 0) < minLevel.level) {
-    return {
-      ok: false,
-      reason: t("match.levelNeeded", { skill: skill.name, level: held.proficiencyName ?? t("match.noLevel"), needed: minLevel.name }),
-      missing: false,
-    };
-  }
-  return { ok: true, reason: null, missing: false };
+  if (held.startDate && held.startDate > jobDate) return { status: "upcoming", label: t("find.startsOn", { date: formatDate(held.startDate) }) };
+  return { status: "expiring", label: t("find.levelTooLow") };
+}
+
+/**
+ * For a person with several records (ERP user, Employee): the best assignment of a skill across all
+ * of them, with the record that holds it (a click opens that record). Best: one that counts for the
+ * job; otherwise the one closest to counting (later end date, then higher level).
+ */
+export function heldAcrossRecords<P extends { id: string }, H extends HeldSkill>(
+  groups: { person: P; records: P[] }[],
+  lookup: (recordId: string, skillId: string) => H | undefined,
+  jobDate: string,
+  today: string,
+  minLevel: { level: number; name: string } | null,
+): (personId: string, skillId: string) => { record: P; held: H } | undefined {
+  const recordsOf = new Map(groups.map((g) => [g.person.id, g.records]));
+  return (personId, skillId) => {
+    const candidates = (recordsOf.get(personId) ?? []).flatMap((record) => {
+      const held = lookup(record.id, skillId);
+      return held ? [{ record, held, ok: checkSkillForJob(held, { name: "" }, jobDate, today, minLevel).ok }] : [];
+    });
+    const endOf = (h: HeldSkill) => normalizeEndDate(h.endDate) ?? "9999-12-31";
+    const better = (a: (typeof candidates)[number], b: (typeof candidates)[number]) =>
+      Number(b.ok) - Number(a.ok) || endOf(b.held).localeCompare(endOf(a.held)) || (b.held.proficiencyLevel ?? 0) - (a.held.proficiencyLevel ?? 0);
+    const best = candidates.sort(better)[0];
+    return best && { record: best.record, held: best.held };
+  };
 }
 
 export interface JobMatch<P> {

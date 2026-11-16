@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkSkillForJob, matchTechnicians, minimumLevelLabel } from "./jobMatch";
+import { checkSkillForJob, heldAcrossRecords, jobDayLabel, matchTechnicians, minimumLevelLabel } from "./jobMatch";
+import { groupPersonRecords } from "./persons";
 import { isValidOn } from "./status";
 
 const JOB = "2026-12-15";
@@ -59,6 +60,16 @@ describe("checkSkillForJob", () => {
       "First aid: no level, Advanced needed",
     );
     expect(checkSkillForJob(assignment({ proficiencyLevel: 3, proficiencyName: "Expert" }), firstAid, JOB, TODAY, min).ok).toBe(true);
+  });
+
+  it("names every problem of a skill, not only the first: expired and too low a level", () => {
+    const min = { level: 2, name: "Advanced" };
+    expect(checkSkillForJob(assignment({ endDate: "2026-11-01" }), firstAid, JOB, TODAY, min).reason).toBe(
+      "First aid expired on 01.11.2026; level Basic, Advanced needed",
+    );
+    expect(checkSkillForJob(assignment({ startDate: "2026-12-20" }), firstAid, JOB, TODAY, min).reason).toBe(
+      "First aid is valid only from 20.12.2026; level Basic, Advanced needed",
+    );
   });
 });
 
@@ -140,6 +151,72 @@ describe("people without a job title", () => {
       ["tech", true],
       ["staff", false],
     ]);
+  });
+});
+
+describe("one person with several records (ERP user and Employee, linked by refId)", () => {
+  const anna = [
+    { id: "annaU", name: "Anna Schneider", type: "ERPUSER", refId: "annaU", jobTitle: "Service Technician" },
+    { id: "annaE", name: "Anna Schneider", type: "EMPLOYEE", refId: "annaU", jobTitle: "Service Technician" },
+  ];
+  const welding = { id: "weld", name: "Welding" };
+  const match = (held: Record<string, ReturnType<typeof assignment>>, required: { id: string; name: string }[], min: { level: number; name: string } | null = null) => {
+    const groups = groupPersonRecords(anna);
+    const lookup = heldAcrossRecords(groups, (p, s) => held[`${p}|${s}`], JOB, TODAY, min);
+    return { lookup, result: matchTechnicians(groups.map((g) => g.person), required, (p, s) => lookup(p, s)?.held, JOB, TODAY, min) };
+  };
+
+  it("is one person, shown by the ERP user record", () => {
+    expect(groupPersonRecords(anna).map((g) => [g.person.id, g.records.map((r) => r.id)])).toEqual([["annaU", ["annaU", "annaE"]]]);
+  });
+
+  it("is ready when the job's skills are spread over her records (Welding on Employee, First aid on ERP user)", () => {
+    const { result } = match({ "annaE|weld": assignment(), "annaU|aid": assignment() }, [welding, firstAid]);
+    expect(result.ready.map((r) => r.person.id)).toEqual(["annaU"]);
+  });
+
+  it("counts once when both records hold the skill", () => {
+    const { result } = match({ "annaE|aid": assignment(), "annaU|aid": assignment() }, [firstAid]);
+    expect(result.ready).toHaveLength(1);
+  });
+
+  it("is ready, and not also listed as missing the skill, when only the Employee record holds it", () => {
+    const { result, lookup } = match({ "annaE|aid": assignment() }, [firstAid]);
+    expect(result.ready.map((r) => r.person.id)).toEqual(["annaU"]);
+    expect(result.missingOne).toEqual([]);
+    expect(lookup("annaU", "aid")?.record.id).toBe("annaE"); // a click opens the record that holds it
+  });
+
+  it("takes the best assignment across her records: a valid one beats an expired one", () => {
+    const { lookup, result } = match({ "annaU|aid": assignment({ endDate: "2026-11-01" }), "annaE|aid": assignment() }, [firstAid]);
+    expect(lookup("annaU", "aid")?.record.id).toBe("annaE");
+    expect(result.ready).toHaveLength(1);
+  });
+
+  it("when none counts, takes the one closest to counting (the later end date)", () => {
+    const { lookup } = match({ "annaU|aid": assignment({ endDate: "2026-11-01" }), "annaE|aid": assignment({ endDate: "2026-12-10" }) }, [firstAid]);
+    expect(lookup("annaU", "aid")?.record.id).toBe("annaE");
+  });
+});
+
+describe("jobDayLabel (the cell in Find technician)", () => {
+  const label = (over: Parameters<typeof assignment>[0] | null, min: { level: number; name: string } | null = null) => {
+    const held = over === null ? undefined : assignment(over);
+    return jobDayLabel(held, checkSkillForJob(held, firstAid, JOB, TODAY, min), JOB, TODAY);
+  };
+
+  it.each([
+    [null, "none", "Not assigned"],
+    [{}, "valid", "Valid on job day"],
+    [{ endDate: "2026-11-15" }, "expired", "Expired 15.11.2026"],
+    [{ endDate: "2026-12-01" }, "expiring", "Ends 01.12.2026"],
+    [{ startDate: "2026-12-20" }, "upcoming", "Starts 20.12.2026"],
+  ] as const)("%j → %s, %s", (over, status, text) => {
+    expect(label(over)).toEqual({ status, label: text });
+  });
+
+  it("names a level that is too low", () => {
+    expect(label({}, { level: 2, name: "Advanced" })).toEqual({ status: "expiring", label: "Level too low" });
   });
 });
 

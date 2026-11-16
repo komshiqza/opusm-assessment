@@ -20,12 +20,12 @@ import {
   Text,
   Title,
 } from "@ui5/webcomponents-react";
-import { checkSkillForJob, matchTechnicians, minimumLevelLabel } from "@/lib/domain/jobMatch";
+import { checkSkillForJob, heldAcrossRecords, jobDayLabel, matchTechnicians, minimumLevelLabel } from "@/lib/domain/jobMatch";
 import { normalizeEndDate } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { validateValidity } from "@/lib/domain/validation";
-import { personsWithoutJobTitle, recordsNeedingType, selectPersonRows } from "@/lib/domain/persons";
-import { formatDate, formatPersonType } from "@/lib/format";
+import { groupPersonRecords, personsWithoutJobTitle, selectPersonRows } from "@/lib/domain/persons";
+import { formatDate } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
@@ -62,34 +62,35 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
   const required = definitions.filter((d) => skillIds.includes(d.id));
   const dateError = jobDate ? validateValidity(jobDate, null) : t("find.enterJobDate");
 
-  const persons = useMemo(() => selectPersonRows(state.data?.persons ?? [], state.assignedPersonIds, false), [state.data, state.assignedPersonIds]);
-  /** "ERP user" etc. only where two records of one person are listed (one row per person otherwise). */
-  const needsType = useMemo(() => recordsNeedingType(persons), [persons]);
-  const lookup = (personId: string, skillId: string) => state.assignmentByCell.get(cellKey(personId, skillId));
+  /**
+   * One row per person, not per record: a person's records (ERP user, Employee) are grouped by refId,
+   * and each skill counts with the best assignment across them. The matrix stays per record.
+   */
+  const people = useMemo(
+    () => groupPersonRecords(selectPersonRows(state.data?.persons ?? [], state.assignedPersonIds, false)),
+    [state.data, state.assignedPersonIds],
+  );
+  const holder = heldAcrossRecords(people, (recordId, skillId) => state.assignmentByCell.get(cellKey(recordId, skillId)), jobDate, today, minLevel);
+  const lookup = (personId: string, skillId: string) => holder(personId, skillId)?.held;
   const withoutJobTitle = useMemo(() => personsWithoutJobTitle(state.data?.persons ?? []), [state.data]);
-  const result = dateError ? null : matchTechnicians(persons, required, lookup, jobDate, today, minLevel, (p) => !withoutJobTitle.has(p.id));
+  const result = dateError
+    ? null
+    : matchTechnicians(people.map((g) => g.person), required, lookup, jobDate, today, minLevel, (p) => !withoutJobTitle.has(p.id));
 
-  /** One cell: how this person's skill looks on the job date. Clicking it opens the assignment. */
+  /** One cell: how this person's skill looks on the job date. Clicking it opens the record that holds it. */
   const skillCell = (person: Person, skill: SkillDefinition): ReactNode => {
-    const held = lookup(person.id, skill.id);
+    const holding = holder(person.id, skill.id);
+    const held = holding?.held;
     const check = checkSkillForJob(held, skill, jobDate, today, minLevel);
     const certs = held ? (state.certificatesBySkill.get(held.id)?.length ?? 0) : 0;
     const end = normalizeEndDate(held?.endDate);
-    const startsLater = Boolean(held?.startDate && held.startDate > jobDate);
-    const [display, label] = !held
-      ? [STATUS_DISPLAY.none, t("status.none")]
-      : check.ok
-        ? [STATUS_DISPLAY.valid, t("find.validOnJobDay")]
-        : end && end < jobDate
-          ? [end < today ? STATUS_DISPLAY.expired : STATUS_DISPLAY.expiring, t("find.endsOn", { date: formatDate(end) })]
-          : startsLater
-            ? [STATUS_DISPLAY.upcoming, t("find.startsOn", { date: formatDate(held.startDate) })]
-            : [STATUS_DISPLAY.expiring, t("find.levelTooLow")];
+    const { status, label } = jobDayLabel(held, check, jobDate, today);
+    const display = STATUS_DISPLAY[status];
     return (
       <button
         type="button"
         className={styles.cell}
-        onClick={() => onOpen(person, skill)}
+        onClick={() => onOpen(holding?.record ?? person, skill)}
         title={check.reason ?? t("find.validOn", { skill: skill.name, date: formatDate(jobDate) })}
       >
         <span className={styles.status} style={{ color: display.color }}>
@@ -118,7 +119,7 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
         <Link onClick={() => onOpenPerson(p)} accessibleName={t("person.allSkills", { name: p.name })} className={styles.personLink}>
           {p.name}
         </Link>
-        <span className={styles.muted}>{[p.jobTitle, needsType.has(p.id) ? formatPersonType(p.type) : ""].filter(Boolean).join(" · ")}</span>
+        <span className={styles.muted}>{p.jobTitle}</span>
         {!technician && <NoJobTitleTag />}
       </span>
     </TableCell>

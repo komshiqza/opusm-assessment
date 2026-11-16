@@ -34,16 +34,28 @@ export function countPhysicalPersons(persons: PersonRecord[]): number {
   return groupByPhysicalPerson(persons).length;
 }
 
+/** The record that stands for the person: the ERPUSER record the others point to. */
+function mainRecord<P extends PersonRecord>(group: P[]): P {
+  return group.find((p) => p.type === "ERPUSER" && p.id === physicalPersonKey(p)) ?? group.find((p) => p.type === "ERPUSER") ?? group[0];
+}
+
 export function selectPersonRows<P extends PersonRecord>(persons: P[], personIdsWithAssignments: Set<string>, showAll: boolean): P[] {
   if (showAll) return persons;
   const shown = new Set<string>();
   for (const group of groupByPhysicalPerson(persons)) {
     if (!group.some((p) => p.jobTitle?.trim())) continue;
-    const main = group.find((p) => p.type === "ERPUSER" && p.id === physicalPersonKey(p)) ?? group.find((p) => p.type === "ERPUSER") ?? group[0];
-    shown.add(main.id);
+    shown.add(mainRecord(group).id);
   }
   for (const p of persons) if (personIdsWithAssignments.has(p.id)) shown.add(p.id);
   return persons.filter((p) => shown.has(p.id));
+}
+
+/**
+ * One entry per physical person, for "Find technician" (which asks about people, not records): the
+ * main record stands for the person, `records` are all of the person's given records.
+ */
+export function groupPersonRecords<P extends PersonRecord>(rows: P[]): { person: P; records: P[] }[] {
+  return groupByPhysicalPerson(rows).map((records) => ({ person: mainRecord(records), records }));
 }
 
 /**
