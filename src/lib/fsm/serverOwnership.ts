@@ -7,6 +7,8 @@ import "server-only";
  * only Tags/Scales named `<CANDIDATE_ID>::…`, Skills of those Tags and Attachments of those Skills.
  *
  * - Only the writes this app makes are recognised; any other write is refused (default deny).
+ * - Each write may carry only the fields the app itself sends (an exact allowlist), with the expected
+ *   types; any other field, e.g. a nested `tag` or a foreign `id`, is refused.
  * - Every target is read fresh from FSM (Skill Service for tags, skills and scales; Data API for
  *   attachments), never taken from the request alone.
  * - If FSM cannot be asked, or the body cannot be read, the write is refused (fail closed).
@@ -144,44 +146,59 @@ interface CheckInput {
 
 /** The writes the app makes, by method and path shape. Anything else has no entry and is refused. */
 const CHECKS: Record<string, (input: CheckInput) => Promise<void>> = {
-  // Create the proficiency scale
+  // Create the proficiency scale: { name, proficiencies: [{ name, isDefault? }] }
   "POST skill/v1/scales": async ({ body }) => {
-    const scale = asObject(await body());
+    const scale = onlyFields(asObject(await body()), ["name", "proficiencies"], "scale");
     assertOwnName(asString(scale.name, "scale name"), "Scale");
+    const levels = scale.proficiencies;
+    if (!Array.isArray(levels) || levels.length === 0 || levels.length > 10) throw new OwnershipError("Refused: a scale needs 1 to 10 levels.");
+    for (const level of levels.map(asObject)) {
+      onlyFields(level, ["name", "isDefault"], "scale level");
+      asString(level.name, "level name");
+      if (level.isDefault !== undefined && typeof level.isDefault !== "boolean") throw new OwnershipError("Refused: unexpected value for isDefault.");
+    }
   },
 
-  // Create or update (rename) tags
+  // Create or update (rename) tags: [{ id?, name, description?, scaleId? }]
   "POST skill/v2/tags": async ({ body, reader }) => {
     for (const item of asItems(await body())) {
+      onlyFields(item, ["id", "name", "description", "scaleId"], "tag");
       assertOwnName(asString(item.name, "tag name"), "Tag");
+      if (item.description !== undefined) asString(item.description, "description");
       if (item.id !== undefined) await assertOwnTag(asId(item.id), reader);
-      if (item.scaleId !== undefined && item.scaleId !== null) await assertOwnScale(asId(item.scaleId), reader);
+      if (item.scaleId !== undefined) await assertOwnScale(asId(item.scaleId), reader);
     }
   },
 
   "DELETE skill/v2/tags": async ({ body, reader }) => {
-    for (const item of asItems(await body())) await assertOwnTag(asId(item.id), reader);
+    for (const item of asItems(await body())) await assertOwnTag(asId(onlyFields(item, ["id"], "tag").id), reader);
   },
 
-  // Create skills (assignments)
+  // Create skills (assignments): [{ tagId, technician, proficiencyId?, startDate, endDate? }]
   "POST skill/v2/skills": async ({ body, reader }) => {
     for (const item of asItems(await body())) {
+      onlyFields(item, ["tagId", "technician", "proficiencyId", "startDate", "endDate"], "skill");
       await assertOwnTag(asId(item.tagId), reader);
-      if (item.id !== undefined) await assertOwnSkill(asId(item.id), reader);
+      asId(item.technician);
+      if (item.proficiencyId !== undefined) asId(item.proficiencyId);
+      asDate(item.startDate);
+      if (item.endDate !== undefined) asDate(item.endDate);
     }
   },
 
   "DELETE skill/v2/skills": async ({ body, reader }) => {
-    for (const item of asItems(await body())) await assertOwnSkill(asId(item.id), reader);
+    for (const item of asItems(await body())) await assertOwnSkill(asId(onlyFields(item, ["id"], "skill").id), reader);
   },
 
-  // Change validity or level: PATCH skill/v1/tags/{tagId}/skills/{skillId}
+  // Change validity or level: PATCH skill/v1/tags/{tagId}/skills/{skillId} with { proficiencyId?, startDate?, endDate? }
   "PATCH skill/v1/tags/:id/skills/:id": async ({ rest, body, reader }) => {
     const [, tagId, , skillId] = rest;
     const skill = await assertOwnSkill(asId(skillId), reader);
     if (skill.tagId !== asId(tagId)) throw new OwnershipError("Refused: this skill does not belong to the tag in the path.");
-    const patch = asObject(await body());
-    if (patch.tagId !== undefined && patch.tagId !== skill.tagId) throw new OwnershipError("Refused: moving a skill to another tag is not allowed.");
+    const patch = onlyFields(asObject(await body()), ["proficiencyId", "startDate", "endDate"], "skill change");
+    if (patch.proficiencyId !== undefined && patch.proficiencyId !== null) asId(patch.proficiencyId);
+    if (patch.startDate !== undefined) asDate(patch.startDate);
+    if (patch.endDate !== undefined) asDate(patch.endDate);
   },
 
   // Upload a certificate: POST data/v4/Attachment. The file itself is checked first (no FSM call).
@@ -252,6 +269,20 @@ function asItems(value: unknown): Record<string, unknown>[] {
 function asString(value: unknown, what: string): string {
   if (typeof value !== "string") throw new OwnershipError(`Refused: ${what} is missing.`);
   return value;
+}
+
+/** The object, if it has no field outside `allowed`; otherwise the write is refused. */
+function onlyFields(value: Record<string, unknown>, allowed: string[], what: string): Record<string, unknown> {
+  const unexpected = Object.keys(value).filter((k) => !allowed.includes(k));
+  if (unexpected.length) throw new OwnershipError(`Refused: unexpected fields in the ${what} (${unexpected.join(", ")}).`);
+  return value;
+}
+
+/** A date as the app sends it: yyyy-mm-dd. */
+function asDate(value: unknown): string {
+  const date = asString(value, "date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new OwnershipError("Refused: a date must be written as yyyy-mm-dd.");
+  return date;
 }
 
 function asId(value: unknown): string {

@@ -119,6 +119,20 @@ describe("refused on the server: 403, and nothing reaches FSM", () => {
     ["malformed id in the body", "DELETE", "skill/v2/skills", [{ id: "../tags" }]],
     ["a body that is not JSON", "POST", "skill/v2/tags", "not json"],
     ["an empty bulk write", "DELETE", "skill/v2/tags", []],
+    // Only the fields the app itself sends may pass (an exact allowlist per write).
+    ["create our scale with the id of a foreign scale", "POST", "skill/v1/scales", { id: id("6"), name: "komshiqza::Proficiency", proficiencies: [{ name: "Basic" }] }],
+    ["create our scale with a foreign level id", "POST", "skill/v1/scales", { name: "komshiqza::Proficiency", proficiencies: [{ id: id("6"), name: "Basic" }] }],
+    ["create our scale with a level of a foreign scale", "POST", "skill/v1/scales", { name: "komshiqza::Proficiency", proficiencies: [{ name: "Basic", scaleId: id("6") }] }],
+    ["create our scale with levels that are not a list", "POST", "skill/v1/scales", { name: "komshiqza::Proficiency", proficiencies: { name: "Basic" } }],
+    ["edit our skill with a nested foreign tag", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { endDate: "2027-01-01", tag: { id: DEMO_TAG } }],
+    ["edit our skill and move it to another tag", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { tagId: OWN_TAG, endDate: "2027-01-01" }],
+    ["edit our skill with a date that is not a date", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { endDate: { $gt: "" } }],
+    ["assign our tag with a nested foreign tag", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, tag: { id: DEMO_TAG }, technician: PERSON, startDate: "2026-01-01" }]],
+    ["assign our tag with the id of a demo skill", "POST", "skill/v2/skills", [{ id: DEMO_SKILL, tagId: OWN_TAG, technician: PERSON, startDate: "2026-01-01" }]],
+    ["assign our tag to a person given as an object", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: { id: PERSON }, startDate: "2026-01-01" }]],
+    ["create our tag with an extra field", "POST", "skill/v2/tags", [{ name: "komshiqza::Crane", scaleId: OWN_SCALE, scale: { id: id("6") } }]],
+    ["delete our tag with an extra field", "DELETE", "skill/v2/tags", [{ id: OWN_TAG, name: "x" }]],
+    ["delete our skill with an extra field", "DELETE", "skill/v2/skills", [{ id: OWN_SKILL, tagId: DEMO_TAG }]],
   ] as const)("%s", async (_name, method, path, body) => {
     const res = await send(method, path, body);
     expect(res.status).toBe(403);
@@ -169,6 +183,9 @@ describe("our own writes still reach FSM", () => {
     ["rename our tag", "POST", "skill/v2/tags", [{ id: OWN_TAG, name: "komshiqza::Welding 2", description: " ", scaleId: OWN_SCALE }]],
     ["delete our tag", "DELETE", "skill/v2/tags", [{ id: OWN_TAG }]],
     ["assign our tag", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, startDate: "2026-01-01" }]],
+    ["assign our tag with level and end, as the app sends it", "POST", "skill/v2/skills", [{ tagId: OWN_TAG, technician: PERSON, proficiencyId: id("6"), startDate: "2026-01-01", endDate: "2027-01-01" }]],
+    ["create the scale with its three levels, as the app sends it", "POST", "skill/v1/scales", { name: "komshiqza::Proficiency", proficiencies: [{ name: "Basic", isDefault: true }, { name: "Advanced" }, { name: "Expert" }] }],
+    ["edit our skill as the app sends it", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { proficiencyId: id("6"), startDate: "2026-01-01", endDate: "9999-12-31" }],
     ["edit our skill", "PATCH", `skill/v1/tags/${OWN_TAG}/skills/${OWN_SKILL}`, { endDate: "2027-01-01", proficiencyId: null }],
     ["delete our skill", "DELETE", "skill/v2/skills", [{ id: OWN_SKILL }]],
     ["upload a certificate to our skill", "POST", "data/v4/Attachment", upload(OWN_SKILL)],
