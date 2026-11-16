@@ -187,28 +187,29 @@ export interface DeleteImpact {
 }
 
 /** What deleting a skill definition would remove (shown in the confirmation dialog). */
-export async function getDeleteImpact(tagId: string): Promise<DeleteImpact & { skillIds: string[] }> {
+export async function getDeleteImpact(tagId: string): Promise<DeleteImpact & { skillIds: string[]; certificateIds: string[] }> {
   assertFsmId(tagId);
   const skills = await skillSearch<SkillServiceSkill & { deleted?: boolean }>("v1/skills", [{ field: "tag.id", operator: "=", value: tagId }]);
-  const skillIds = skills.filter((s) => !s.deleted).map((s) => s.id);
-  const certificates = await loadCertificates(skillIds);
-  return { assignments: skillIds.length, certificates: certificates.length, skillIds };
+  const skillIds = skills.filter((s) => !s.deleted && s.tagId === tagId).map((s) => s.id);
+  const certificateIds = (await loadCertificates(skillIds)).map((c) => c.id);
+  return { assignments: skillIds.length, certificates: certificateIds.length, skillIds, certificateIds };
 }
 
 /**
  * Deletes a skill definition including its assignments and their certificates
- * (certificates → assignments → tag). Stops at the first failure; what was deleted stays deleted.
+ * (certificates → assignments → tag). FSM itself refuses to delete a Tag that still has Skills.
+ * Stops at the first failure; what was deleted until then stays deleted.
  */
 export async function deleteSkillDefinition(tagId: string): Promise<DeleteImpact> {
   await assertOwnTag(tagId);
-  const { skillIds } = await getDeleteImpact(tagId);
-  const certificates = await loadCertificates(skillIds);
-  for (const c of certificates) await fsmDelete("Attachment", c.id); // all belong to skills of our own tag
+  // Skills of an own tag are own skills, and their attachments are own attachments.
+  const { skillIds, certificateIds } = await getDeleteImpact(tagId);
+  for (const id of certificateIds) await fsmDelete("Attachment", id);
   if (skillIds.length) {
     assertBulkOk(await skillApi("v2/skills", { method: "DELETE", body: skillIds.map((id) => ({ id })) }));
   }
   assertBulkOk(await skillApi("v2/tags", { method: "DELETE", body: [{ id: tagId }] }));
-  return { assignments: skillIds.length, certificates: certificates.length };
+  return { assignments: skillIds.length, certificates: certificateIds.length };
 }
 
 // --- Writes: assignments (Skills) -------------------------------------------------------

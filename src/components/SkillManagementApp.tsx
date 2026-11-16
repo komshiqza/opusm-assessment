@@ -9,9 +9,10 @@ import { ToastProvider } from "./common/Toast";
 import { SkillMatrix } from "./matrix/SkillMatrix";
 import { SkillCatalog } from "./catalog/SkillCatalog";
 import { AssignmentDialog } from "./assignment/AssignmentDialog";
+import { ExpiryOverview } from "./expiry/ExpiryOverview";
 import styles from "./SkillManagementApp.module.css";
 
-type TabKey = "matrix" | "catalogue";
+type TabKey = "matrix" | "expiry" | "catalogue";
 
 export function SkillManagementApp() {
   const state = useSkillData();
@@ -51,23 +52,30 @@ export function SkillManagementApp() {
 
         {state.data && (
           <>
-          <BusyIndicator active={state.refreshing} delay={300} className={styles.content}>
-            <TabContainer
-              className={styles.tabs}
-              contentBackgroundDesign="Transparent"
-              onTabSelect={(e) => setTab((e.detail.tab.dataset.key as TabKey) ?? "matrix")}
-            >
-              <Tab text="Skill matrix" data-key="matrix" selected={tab === "matrix"}>
-                <SkillMatrix state={state} onOpenCell={(person, definition) => setCell({ person, definition })} onGoToCatalogue={() => setTab("catalogue")} />
-              </Tab>
-              <Tab text={`Skill catalogue (${state.data.definitions.length})`} data-key="catalogue" selected={tab === "catalogue"}>
-                <SkillCatalog state={state} />
-              </Tab>
-            </TabContainer>
-          </BusyIndicator>
-          <p className={styles.footnote}>
-            Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data; only active persons are shown.
-          </p>
+            <BusyIndicator active={state.refreshing} delay={300} className={styles.content}>
+              <TabContainer
+                className={styles.tabs}
+                contentBackgroundDesign="Transparent"
+                onTabSelect={(e) => setTab((e.detail.tab.dataset.key as TabKey) ?? "matrix")}
+              >
+                <Tab text="Skill matrix" data-key="matrix" selected={tab === "matrix"}>
+                  <SkillMatrix
+                    state={state}
+                    onOpenCell={(person, definition) => setCell({ person, definition })}
+                    onGoToCatalogue={() => setTab("catalogue")}
+                  />
+                </Tab>
+                <Tab text="Expiry overview" data-key="expiry" selected={tab === "expiry"}>
+                  <ExpiryOverview state={state} onOpen={(person, definition) => setCell({ person, definition })} />
+                </Tab>
+                <Tab text={`Skill catalogue (${state.data.definitions.length})`} data-key="catalogue" selected={tab === "catalogue"}>
+                  <SkillCatalog state={state} />
+                </Tab>
+              </TabContainer>
+            </BusyIndicator>
+            <p className={styles.footnote}>
+              Your skills are stored in FSM with the prefix “{NAME_PREFIX}”. Persons are read-only demo data; only active persons are shown.
+            </p>
           </>
         )}
       </main>

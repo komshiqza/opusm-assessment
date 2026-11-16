@@ -23,7 +23,8 @@
 }
 
 .footnote {
-  margin: 0.5rem 0 0;
+  margin: 0;
+  padding-inline: 1rem;
   color: var(--sapContent_LabelColor);
   font-size: var(--sapFontSmallSize);
 }

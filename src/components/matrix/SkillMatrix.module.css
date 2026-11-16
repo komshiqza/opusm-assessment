@@ -75,6 +75,8 @@
 /* Scrolls in both directions; header row and person column stay visible. */
 .scroller {
   overflow: auto;
+  width: fit-content;
+  max-width: 100%;
   max-height: calc(100vh - 17rem);
   min-height: 12rem;
   border: 1px solid var(--sapList_BorderColor);
@@ -86,7 +88,6 @@
   border-collapse: separate;
   border-spacing: 0;
   width: max-content;
-  min-width: 100%;
 }
 
 .table th,
