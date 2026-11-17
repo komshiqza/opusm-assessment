@@ -90,7 +90,7 @@ export function DeleteSkillDialog({ skill, onDeleted, reload, onClose }: DeleteS
           <MessageStrip design="Critical" hideCloseButton>
             {t("deleteDialog.inUse", {
               assignments: tn("catalogue.persons", impact.assignments),
-              certificates: impact.certificates ? t("deleteDialog.inUseCertificates", { n: impact.certificates }) : "",
+              certificates: impact.certificates ? t("deleteDialog.inUseCertificates", { certificates: tn("delete.withCertificates", impact.certificates) }) : "",
               andCertificates: impact.certificates ? t("deleteDialog.andCertificates") : "",
             })}
           </MessageStrip>

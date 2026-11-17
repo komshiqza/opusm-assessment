@@ -146,7 +146,7 @@ export function AssignmentDialog({ person, definition, state, recordId, onClose 
           return;
         }
         if (!allUploaded) return;
-        toast(outcome?.uploaded.length ? t("assign.savedWith", { n: outcome.uploaded.length }) : t("assign.saved"));
+        toast(outcome?.uploaded.length ? tn("assign.savedWith", outcome.uploaded.length) : t("assign.saved"));
         onClose();
         return;
       }
@@ -524,7 +524,7 @@ export function AssignmentDialog({ person, definition, state, recordId, onClose 
           {t("assign.removeText", {
             person: person.name,
             skill: definition.name,
-            certificates: certificates.length ? t("assign.removeCertificates", { n: certificates.length }) : "",
+            certificates: certificates.length ? tn("assign.removeCertificates", certificates.length) : "",
           })}
         </ConfirmDialog>
       )}

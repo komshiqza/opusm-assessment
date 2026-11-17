@@ -126,7 +126,7 @@ export function SkillCatalog({ state }: { state: SkillDataState }) {
           onDeleted={async (impact) => {
             const refreshed = await state.reload();
             const deleted = impact.assignments
-              ? t("catalogue.deletedWith", { name: dialog.skill.name, assignments: impact.assignments, certificates: impact.certificates })
+              ? t("catalogue.deletedWith", { name: dialog.skill.name, assignments: tn("delete.assignments", impact.assignments), certificates: tn("delete.withCertificates", impact.certificates) })
               : t("catalogue.deleted", { name: dialog.skill.name });
             // A failed reload shows its own message with "Try again" on the page once the dialog closes.
             toast(refreshed ? deleted : t("catalogue.notRefreshed", { done: deleted }));

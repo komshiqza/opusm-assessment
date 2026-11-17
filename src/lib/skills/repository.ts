@@ -228,7 +228,7 @@ export interface DeleteTargets extends DeleteImpact {
 /** FSM has more assignments or certificates for the skill than the user confirmed. Nothing was deleted. */
 export class DeleteImpactChangedError extends Error {
   constructor(public readonly impact: DeleteTargets) {
-    super(t("deleteDialog.changed", { assignments: impact.assignments, certificates: impact.certificates }));
+    super(t("deleteDialog.changed", { assignments: tn("delete.assignments", impact.assignments), certificates: tn("delete.certificates", impact.certificates) }));
     this.name = "DeleteImpactChangedError";
   }
 }

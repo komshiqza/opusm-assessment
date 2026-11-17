@@ -135,6 +135,7 @@ describe("own data", () => {
     const attempt = deleteSkillDefinition(OWN_TAG, { skillIds: [SKILL], certificateIds: [ATTACHMENT] });
     await expect(attempt).rejects.toBeInstanceOf(DeleteImpactChangedError);
     await expect(attempt).rejects.toMatchObject({ impact: { assignments: 2, certificates: 1 } });
+    await expect(attempt).rejects.toThrow("(now 2 assignments and 1 certificate)");
     expect(writes()).toEqual([]);
   });
 
