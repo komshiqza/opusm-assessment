@@ -12,6 +12,7 @@ import {
   MultiComboBoxItem,
   Option,
   Select,
+  Title,
   ToggleButton,
 } from "@ui5/webcomponents-react";
 import { getAssignmentStatus, type AssignmentStatus } from "@/lib/domain/status";
@@ -26,7 +27,7 @@ import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
-import { filterMatrixRows } from "./matrixRows";
+import { filterMatrixRows, peopleTitle } from "./matrixRows";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
 import styles from "./SkillMatrix.module.css";
@@ -256,8 +257,11 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
         </span>
       </div>
 
-      {/* Table toolbar (Fiori: filters above, the table's own actions in its toolbar, on the right). */}
+      {/* Table toolbar (Fiori: title with item counter on the left, the table's actions on the right). */}
       <div className={styles.tableToolbar}>
+        <Title level="H4" id="matrix-title">
+          {peopleTitle(visiblePersons.length)}
+        </Title>
         <div className={styles.tableActions}>
           <Button design="Transparent" icon="add-employee" onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
             {t("matrix.bulk")}
@@ -292,7 +296,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
         <IllustratedMessage name="NoFilterResults" titleText={t("matrix.noMatch")} subtitleText={t("matrix.noMatchHint")} />
       ) : isPhone ? (
         // On a phone a wide matrix is hard to use: one card per person, skills stacked.
-        <ul className={styles.cards}>
+        <ul className={styles.cards} aria-labelledby="matrix-title">
           {visiblePersons.map((p) => (
             <li key={p.id} className={styles.card}>
               <div className={styles.cardHead}>
@@ -343,7 +347,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           style={{ "--skill-columns": visibleSkills.length } as CSSProperties}
         >
           <div className={styles.scroller} ref={scrollerRef}>
-            <table className={styles.table} data-compact={isCompact || undefined}>
+            <table className={styles.table} data-compact={isCompact || undefined} aria-labelledby="matrix-title">
               <thead>
                 <tr>
                   <th scope="col" className={styles.corner}>

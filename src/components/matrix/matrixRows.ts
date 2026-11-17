@@ -1,4 +1,5 @@
 import { matchesJobTitles } from "@/lib/domain/jobTitleFilter";
+import { t } from "@/lib/i18n/t";
 
 /** The matrix filters a row has to pass; the counters do not use them (they count the whole view). */
 export interface MatrixRowFilter<S extends { id: string }> {
@@ -23,4 +24,9 @@ export function filterMatrixRows<P extends { id: string; name: string; jobTitle:
     if (statusFilter === "all") return true;
     return skills.some((s) => statusOf(p.id, s.id) === statusFilter);
   });
+}
+
+/** The table title with its item counter (Fiori table toolbar): "People (10)"; no counter when nothing is shown. */
+export function peopleTitle(shown: number): string {
+  return shown > 0 ? t("matrix.peopleCount", { n: shown }) : t("matrix.people");
 }

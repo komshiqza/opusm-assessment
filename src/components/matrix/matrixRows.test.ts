@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_JOB_TITLE } from "@/lib/domain/jobTitleFilter";
-import { filterMatrixRows } from "./matrixRows";
+import { filterMatrixRows, peopleTitle } from "./matrixRows";
 
 const rows = [
   { id: "anna", name: "Anna Schneider", jobTitle: "Service Technician" },
@@ -36,5 +36,16 @@ describe("filterMatrixRows (the rows the matrix, the CSV export and Bulk assign 
     expect(ids({ jobTitles: ["Service Technician", "Electrician"], statusFilter: "expired" })).toEqual(["anna", "eli"]);
     // With only First aid shown, Eli's expired Welding no longer counts.
     expect(ids({ jobTitles: ["Service Technician", "Electrician"], statusFilter: "expired", skills: [{ id: "AID" }] })).toEqual(["anna"]);
+  });
+});
+
+describe("peopleTitle (the title of the matrix table: Fiori title with item counter)", () => {
+  it("counts the rows shown now", () => {
+    expect(peopleTitle(13)).toBe("People (13)");
+    expect(peopleTitle(1)).toBe("People (1)");
+  });
+
+  it("drops the counter when no row is shown", () => {
+    expect(peopleTitle(0)).toBe("People");
   });
 });
