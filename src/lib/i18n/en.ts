@@ -296,6 +296,8 @@ export const en = {
   "certificates.deleteText": "“{name}” will be deleted from FSM. This cannot be undone.",
   "certificates.deleted": "Certificate deleted",
   "certificates.doneDeleted": "The certificate is deleted",
+  "certificates.loading": "Loading certificate…",
+  "certificates.loadFailed": "Could not load the certificate. {error}",
 
   // Person view
   "personView.summary": "{held} of {total} skills assigned",

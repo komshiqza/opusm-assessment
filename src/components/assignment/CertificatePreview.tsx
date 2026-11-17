@@ -55,10 +55,10 @@ export function CertificatePreview({ certificate, onClose }: { certificate: Cert
         />
       }
     >
-      {!preview && <BusyIndicator active delay={0} size="L" text="Loading certificate…" className={styles.previewLoading} />}
+      {!preview && <BusyIndicator active delay={0} size="L" text={t("certificates.loading")} className={styles.previewLoading} />}
       {preview && "error" in preview && (
         <MessageStrip design="Negative" hideCloseButton>
-          Could not load the certificate. {preview.error}
+          {t("certificates.loadFailed", { error: preview.error })}
         </MessageStrip>
       )}
       {preview && "url" in preview &&

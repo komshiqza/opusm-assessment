@@ -25,6 +25,14 @@ describe("English and German texts", () => {
   });
 });
 
+describe("certificate preview texts", () => {
+  it("exist in both languages, the error with FSM's reason", () => {
+    expect(t("certificates.loading", undefined, "de")).toBe("Zertifikat wird geladen…");
+    expect(t("certificates.loadFailed", { error: "Timeout." }, "en")).toBe("Could not load the certificate. Timeout.");
+    expect(t("certificates.loadFailed", { error: "Timeout." }, "de")).toBe("Das Zertifikat konnte nicht geladen werden. Timeout.");
+  });
+});
+
 describe("t and tn", () => {
   it("fill placeholders and pick the plural form", () => {
     expect(t("status.expiresOn", { date: "11.12.2026" }, "en")).toBe("Expires 11.12.2026");

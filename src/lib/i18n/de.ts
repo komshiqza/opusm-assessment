@@ -295,6 +295,8 @@ export const de: Record<MessageKey, string> = {
   "certificates.deleteText": "«{name}» wird aus FSM gelöscht. Das kann nicht rückgängig gemacht werden.",
   "certificates.deleted": "Zertifikat gelöscht",
   "certificates.doneDeleted": "Das Zertifikat ist gelöscht",
+  "certificates.loading": "Zertifikat wird geladen…",
+  "certificates.loadFailed": "Das Zertifikat konnte nicht geladen werden. {error}",
 
   // Person view
   "personView.summary": "{held} von {total} Qualifikationen zugewiesen",
