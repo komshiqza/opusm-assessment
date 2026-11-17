@@ -6,6 +6,7 @@ import { loadCertificateFile } from "@/lib/skills/certificates";
 import { toUserMessage } from "@/lib/errors";
 import type { Certificate } from "@/lib/skills/types";
 import { saveCertificate } from "./saveCertificate";
+import { loadBlobUrl } from "./blobUrl";
 import styles from "./AssignmentDialog.module.css";
 import { t } from "@/lib/i18n/t";
 
@@ -18,20 +19,15 @@ type Preview = { url: string } | { error: string } | null;
 export function CertificatePreview({ certificate, onClose }: { certificate: Certificate; onClose: () => void }) {
   const [preview, setPreview] = useState<Preview>(null);
 
-  useEffect(() => {
-    let url: string | null = null;
-    let cancelled = false;
-    loadCertificateFile(certificate)
-      .then((blob) => {
-        url = URL.createObjectURL(blob);
-        if (!cancelled) setPreview({ url });
-      })
-      .catch((e: unknown) => !cancelled && setPreview({ error: toUserMessage(e) }));
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [certificate]);
+  useEffect(
+    () =>
+      loadBlobUrl(
+        () => loadCertificateFile(certificate),
+        (url) => setPreview({ url }),
+        (e) => setPreview({ error: toUserMessage(e) }),
+      ),
+    [certificate],
+  );
 
   return (
     <Dialog
