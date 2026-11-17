@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 import {
   Button,
   Icon,
@@ -22,6 +22,7 @@ import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
+import { parseJobTitleSelection, readStoredJobTitles, saveJobTitles, subscribeJobTitles } from "@/lib/jobTitleSelection";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
@@ -45,7 +46,9 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const { data, assignmentByCell, alsoOnByCell, certificatesBySkill } = state;
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
-  const [jobTitles, setJobTitles] = usePageState<string[]>("matrix.jobTitles", []);
+  /** Kept in this browser across reloads, like the tab order. */
+  const storedJobTitles = useSyncExternalStore(subscribeJobTitles, readStoredJobTitles, () => "");
+  const jobTitles = useMemo(() => parseJobTitleSelection(storedJobTitles), [storedJobTitles]);
   const [storedStatusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
   const statusFilter = toStatusFilter(storedStatusFilter);
   const today = useToday();
@@ -68,8 +71,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const titleOptions = useMemo(() => jobTitleOptions(data?.persons ?? []), [data]);
   const titleFilter = knownJobTitles(jobTitles, titleOptions);
   useEffect(() => {
-    if (data && titleFilter !== jobTitles) setJobTitles(titleFilter);
-  }, [data, titleFilter, jobTitles, setJobTitles]);
+    if (data && titleFilter !== jobTitles) saveJobTitles(titleFilter);
+  }, [data, titleFilter, jobTitles]);
 
   const statusOf = (personId: string, tagId: string) => getAssignmentStatus(assignmentByCell.get(cellKey(personId, tagId)), today);
 
@@ -189,7 +192,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           <MultiComboBox
             id="matrix-job-title-filter"
             placeholder={t("matrix.allJobTitles")}
-            onSelectionChange={(e) => setJobTitles(e.detail.items.map((i) => String(i.dataset.id)))}
+            onSelectionChange={(e) => saveJobTitles(e.detail.items.map((i) => String(i.dataset.id)))}
           >
             {titleOptions.map((title) => (
               <MultiComboBoxItem
@@ -219,7 +222,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             className={styles.reset}
             onClick={() => {
               setPersonQuery("");
-              setJobTitles([]);
+              saveJobTitles([]);
               setSkillIds([]);
               setStatusFilter("all");
             }}
