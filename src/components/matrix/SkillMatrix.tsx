@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 import {
   Button,
   CheckBox,
@@ -21,6 +21,7 @@ import { knownSkillIds } from "@/lib/domain/skillFilter";
 import { NO_JOB_TITLE, isStartJobTitleSelection, jobTitleOptions, knownJobTitles, selectedJobTitles } from "@/lib/domain/jobTitleFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
+import { useFillHeight } from "@/hooks/useFillHeight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
 import { parseJobTitleSelection, readStoredJobTitles, resetJobTitles, saveJobTitles, subscribeJobTitles } from "@/lib/jobTitleSelection";
@@ -60,6 +61,15 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   /** Below 1280 px: icon plus short date, narrower columns (the phone has its own cards). */
   const isCompact = useMediaQuery(COMPACT_QUERY) && !isPhone;
   const [scrollerRef, canScrollRight] = useCanScrollRight();
+  /** The table box ends at the bottom of the screen (no second, page scrollbar); at least 12rem on short screens. */
+  const [fillRef, boxMaxHeight] = useFillHeight(192);
+  const scrollerRefs = useCallback(
+    (node: HTMLElement | null) => {
+      scrollerRef(node);
+      fillRef(node);
+    },
+    [scrollerRef, fillRef],
+  );
   const [bulkOpen, setBulkOpen] = useState(false);
   /** "Show each FSM record": one row per Person record. Off on every load; desktop and tablet only (phone cards stay per person). */
   const [eachRecordChoice, setEachRecord] = usePageState("matrix.eachRecord", false);
@@ -366,7 +376,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           data-more-right={canScrollRight || undefined}
           style={{ "--skill-columns": visibleSkills.length } as CSSProperties}
         >
-          <div className={styles.scroller} ref={scrollerRef}>
+          <div className={styles.scroller} ref={scrollerRefs} style={boxMaxHeight === undefined ? undefined : { maxHeight: boxMaxHeight }}>
             <table className={styles.table} data-compact={isCompact || undefined} aria-labelledby="matrix-title">
               <thead>
                 <tr>

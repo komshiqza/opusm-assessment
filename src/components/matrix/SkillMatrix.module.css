@@ -113,12 +113,15 @@
   z-index: 4;
 }
 
-/* Scrolls in both directions; header row and person column stay visible. */
+/*
+ * Scrolls in both directions; header row and person column stay visible. Its max-height is measured
+ * (useFillHeight) so it ends at the bottom of the screen; this one only holds until the first measurement.
+ * No min-height: fewer rows make a shorter box, not an empty one.
+ */
 .scroller {
   overflow: auto;
   width: 100%;
   max-height: calc(100vh - 17rem);
-  min-height: 12rem;
   border: 1px solid var(--sapList_BorderColor);
   border-radius: var(--sapElement_BorderCornerRadius);
   background: var(--sapList_Background);
