@@ -1,4 +1,4 @@
-import { getAssignmentStatus } from "@/lib/domain/status";
+import { getAssignmentStatus, normalizeEndDate } from "@/lib/domain/status";
 import { formatDate } from "@/lib/format";
 import type { Assignment } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "./statusDisplay";
@@ -18,7 +18,7 @@ export function csvCell(value: string): string {
 /**
  * The matrix as CSV, exactly as shown: the given rows (current filters and "Show" choice) and the
  * given skill columns. One row per person; a skill held on one of the person's linked records gets the
- * same note as on screen in its status cell ("Valid (on Employee record)"). Per skill: status, valid from, valid to, level and number of certificates.
+ * same note as on screen in its status cell ("Valid (on Employee record)"). Per skill: status, valid from, valid to ("No end" as on screen when there is none), level and number of certificates.
  * UTF-8 with BOM so Excel shows umlauts; dates as dd.mm.yyyy.
  */
 export function matrixCsv<P extends { id: string; name: string; jobTitle: string | null }>(
@@ -40,7 +40,8 @@ export function matrixCsv<P extends { id: string; name: string; jobTitle: string
       if (!a) return [STATUS_DISPLAY.none.label, "", "", "", ""];
       const note = recordNote(p, s.id);
       const status = STATUS_DISPLAY[getAssignmentStatus(a, today)].label;
-      return [note ? `${status} (${note})` : status, formatDate(a.startDate), formatDate(a.endDate), a.proficiencyName ?? "", String(certificateCount(a.id))];
+      const end = normalizeEndDate(a.endDate);
+      return [note ? `${status} (${note})` : status, formatDate(a.startDate), end ? formatDate(end) : t("status.noEnd"), a.proficiencyName ?? "", String(certificateCount(a.id))];
     }),
   ]);
   return "﻿" + [header, ...rows].map((cells) => cells.map(csvCell).join(SEPARATOR)).join("\r\n");

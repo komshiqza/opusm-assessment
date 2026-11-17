@@ -77,6 +77,14 @@ describe("matrixCsv (exactly the visible matrix)", () => {
     expect(row).toBe("Sarah Müller;Service Technician;Expiring soon (on Employee record);01.02.2025;15.12.2026;Advanced;1;Not assigned;;;;");
   });
 
+  it("writes the matrix's \"No end\" for a skill without an end date (null or FSM's 9999-12-31), not an empty cell", () => {
+    for (const endDate of [null, "9999-12-31"]) {
+      const open = { "sarah|AID": assignment(endDate, "Basic") };
+      const [, row] = matrixCsv([persons[0]], noNote, [skills[0]], (p, t) => open[`${p}|${t}` as "sarah|AID"], certCount, TODAY).split("\r\n");
+      expect(row).toBe("Sarah Müller;Service Technician;Valid;01.02.2025;No end;Basic;1");
+    }
+  });
+
   it("names the file after the day", () => {
     expect(csvFileName(TODAY)).toBe("skill-matrix-2026-11-16.csv");
   });
