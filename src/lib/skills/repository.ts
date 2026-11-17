@@ -12,7 +12,7 @@
 import { assertBulkOk, fsmDelete, fsmGet, fsmQuery, skillApi, skillSearch } from "@/lib/fsm/client";
 import type { FsmAttachment, FsmPerson, SkillServiceProficiency, SkillServiceScale, SkillServiceSkill, SkillServiceTag } from "@/lib/fsm/types";
 import { NAME_PREFIX, fromScopedName, isOwnName, toScopedName } from "@/lib/candidate";
-import { buildPeople } from "@/lib/domain/persons";
+import { buildPeople, mainRecord } from "@/lib/domain/persons";
 import { OwnershipError, assertFsmId, assertOwnName, assertOwnedByTagName } from "@/lib/fsm/guard";
 import { normalizeEndDate, OPEN_END_DATE, todayIso } from "@/lib/domain/status";
 import { effectiveStartDate, validateSkillName, validateValidity } from "@/lib/domain/validation";
@@ -421,6 +421,44 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
     throw withProgress(e, done);
   }
   await assertNoCertificateLeft([assignmentId]); // the removal itself is complete: nothing to try again
+}
+
+/**
+ * The person's Person records as FSM has them now (by refId, SAP's key for one human), with the
+ * current main record. The page's copy can be out of date: a record may have become (in)active, or a
+ * linked record may have appeared, since it loaded.
+ */
+async function currentPersonRecords(refId: string): Promise<{ mainId: string; recordIds: string[] }> {
+  assertFsmId(refId);
+  const rows = await fsmQuery<{ p: Pick<FsmPerson, "id" | "type" | "inactive"> & { refId?: string | null } }>(
+    `SELECT p.id, p.refId, p.type, p.inactive FROM Person p WHERE p.refId = '${refId}'`,
+    ["Person"],
+  );
+  const records = rows.map(({ p }) => ({ id: p.id, refId: p.refId ?? null, type: p.type ?? null, inactive: Boolean(p.inactive) }));
+  const main = mainRecord(records, refId);
+  if (!main) throw new Error(t("assign.noActiveRecord"));
+  assertFsmId(main.id);
+  return { mainId: main.id, recordIds: records.map((r) => r.id) };
+}
+
+/**
+ * A new assignment for a person: always on the person's current main record, and not at all if any of
+ * the person's current records already holds the skill. Every new assignment of the app goes through here.
+ */
+export async function createAssignmentForPerson(tagId: string, refId: string, input: AssignmentInput): Promise<Assignment> {
+  toWritableDates(input); // invalid dates: stop before asking FSM anything
+  const { mainId, recordIds } = await currentPersonRecords(refId);
+  return createAssignment(tagId, mainId, input, recordIds);
+}
+
+/** Did a timed-out create for this person arrive? Looks on the person's current main record. Reads only. */
+export async function checkAssignmentCreatedForPerson(tagId: string, refId: string): Promise<WriteCheck<Assignment>> {
+  try {
+    const { mainId } = await currentPersonRecords(refId);
+    return await checkAssignmentCreated(tagId, mainId);
+  } catch (e) {
+    return { result: "unconfirmed", error: toUserMessage(e) };
+  }
 }
 
 // --- Checks after a write FSM did not answer -------------------------------------------

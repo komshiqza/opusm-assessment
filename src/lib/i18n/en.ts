@@ -338,6 +338,7 @@ export const en = {
   "upload.notInFsm": "FSM did not answer in time; the file is not in FSM.",
   "upload.moreThanOne": "FSM shows more than one file from this upload.",
   "upload.contentDiffers": "FSM has a new file from this upload, but its content is not the same as the picked file.",
+  "assign.noActiveRecord": "This person has no active record in FSM any more. Reload the page.",
   "assign.exists": "This person already has this skill. Reload the page to see it.",
   "assign.unexpected": "FSM shows an unexpected answer for this person and skill. Reload the page to see what is stored.",
   "assign.notInFsm": "FSM did not answer in time; the skill is not assigned.",

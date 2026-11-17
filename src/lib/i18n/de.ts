@@ -337,6 +337,7 @@ export const de: Record<MessageKey, string> = {
   "upload.notInFsm": "FSM hat nicht rechtzeitig geantwortet; die Datei ist nicht in FSM vorhanden.",
   "upload.moreThanOne": "FSM zeigt mehr als eine Datei aus diesem Upload.",
   "upload.contentDiffers": "In FSM ist eine neue Datei aus diesem Upload vorhanden, ihr Inhalt stimmt jedoch nicht mit der ausgewählten Datei überein.",
+  "assign.noActiveRecord": "Diese Person hat in FSM keinen aktiven Eintrag mehr. Laden Sie die Seite neu.",
   "assign.exists": "Diese Person hat diese Qualifikation bereits. Laden Sie die Seite neu, um sie anzuzeigen.",
   "assign.unexpected": "FSM liefert für diese Person und Qualifikation eine unerwartete Antwort. Laden Sie die Seite neu, um die gespeicherten Daten zu sehen.",
   "assign.notInFsm": "FSM hat nicht rechtzeitig geantwortet; die Qualifikation ist nicht zugewiesen.",

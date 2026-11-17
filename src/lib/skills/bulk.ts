@@ -6,7 +6,7 @@ import { FsmTimeoutError } from "@/lib/fsm/client";
 import { toUserMessage } from "@/lib/errors";
 import { t } from "@/lib/i18n/t";
 import type { Assignment, AssignmentInput } from "./types";
-import { AssignmentExistsError, checkAssignmentCreated, createAssignment, toWritableDates, type WriteCheck } from "./repository";
+import { AssignmentExistsError, checkAssignmentCreatedForPerson, createAssignmentForPerson, toWritableDates, type WriteCheck } from "./repository";
 
 /** Shared company: no bulk imports beyond a few dozen records, so one action is capped. */
 export const BULK_LIMIT = 25;
@@ -26,22 +26,26 @@ function fromCheck(personId: string, check: WriteCheck<Assignment>): BulkResult 
   return { personId, result: "unconfirmed", error: check.error };
 }
 
-/** All Person records of a person (main first); a skill on any of them means "already has it". */
-export type RecordsOf = (personId: string) => string[];
-const onlyItself: RecordsOf = (personId) => [personId];
+/**
+ * A person's refId (SAP's key for all records of one human). Creates and checks read the person's
+ * records fresh by it: new assignments go to the current main record, a skill on any record counts.
+ */
+export type RefIdOf = (personId: string) => string;
+const refIdIsId: RefIdOf = (personId) => personId;
 
 /** One person: the same guarded create as a single assignment, with the same timeout check. */
-async function assignOne(tagId: string, personId: string, input: AssignmentInput, checkFirst: boolean, recordsOf: RecordsOf): Promise<BulkResult> {
+async function assignOne(tagId: string, personId: string, input: AssignmentInput, checkFirst: boolean, refIdOf: RefIdOf): Promise<BulkResult> {
+  const refId = refIdOf(personId);
   if (checkFirst) {
-    const check = await checkAssignmentCreated(tagId, personId);
+    const check = await checkAssignmentCreatedForPerson(tagId, refId);
     if (check.result !== "notDone") return fromCheck(personId, check);
   }
   try {
-    await createAssignment(tagId, personId, input, recordsOf(personId));
+    await createAssignmentForPerson(tagId, refId, input);
     return { personId, result: "assigned" };
   } catch (e) {
     if (e instanceof AssignmentExistsError) return { personId, result: "skipped" };
-    if (e instanceof FsmTimeoutError && e.write) return fromCheck(personId, await checkAssignmentCreated(tagId, personId));
+    if (e instanceof FsmTimeoutError && e.write) return fromCheck(personId, await checkAssignmentCreatedForPerson(tagId, refId));
     return { personId, result: "failed", error: toUserMessage(e) };
   }
 }
@@ -56,28 +60,28 @@ export async function bulkAssign(
   personIds: string[],
   input: AssignmentInput,
   onProgress?: (index: number, total: number) => void,
-  recordsOf: RecordsOf = onlyItself,
+  refIdOf: RefIdOf = refIdIsId,
 ): Promise<BulkResult[]> {
   if (personIds.length > BULK_LIMIT) throw new Error(t("bulk.limit", { max: BULK_LIMIT }));
   toWritableDates(input); // invalid dates: stop before the first write
   const results: BulkResult[] = [];
   for (const [index, personId] of personIds.entries()) {
     onProgress?.(index, personIds.length);
-    results.push(await assignOne(tagId, personId, input, false, recordsOf));
+    results.push(await assignOne(tagId, personId, input, false, refIdOf));
   }
   return results;
 }
 
 /** Try again for the failed persons only; a timed-out one is looked up in FSM first, never created twice. */
-export async function retryBulk(tagId: string, failed: BulkResult[], input: AssignmentInput, recordsOf: RecordsOf = onlyItself): Promise<BulkResult[]> {
+export async function retryBulk(tagId: string, failed: BulkResult[], input: AssignmentInput, refIdOf: RefIdOf = refIdIsId): Promise<BulkResult[]> {
   const results: BulkResult[] = [];
-  for (const r of failed) results.push(await assignOne(tagId, r.personId, input, r.checkFirst ?? false, recordsOf));
+  for (const r of failed) results.push(await assignOne(tagId, r.personId, input, r.checkFirst ?? false, refIdOf));
   return results;
 }
 
 /** Check again for persons whose timed-out create could not be confirmed. Reads only. */
-export async function recheckBulk(tagId: string, unconfirmed: BulkResult[]): Promise<BulkResult[]> {
+export async function recheckBulk(tagId: string, unconfirmed: BulkResult[], refIdOf: RefIdOf = refIdIsId): Promise<BulkResult[]> {
   const results: BulkResult[] = [];
-  for (const r of unconfirmed) results.push(fromCheck(r.personId, await checkAssignmentCreated(tagId, r.personId)));
+  for (const r of unconfirmed) results.push(fromCheck(r.personId, await checkAssignmentCreatedForPerson(tagId, refIdOf(r.personId))));
   return results;
 }

@@ -74,8 +74,8 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
   const input = { startDate: from || null, endDate: to || null, proficiencyId: definitionLevels.length ? levelId || null : null };
   const describe = (p: Person) => p.jobTitle ?? undefined;
   const nameOf = (personId: string) => persons.find((p) => p.id === personId)?.name ?? personId;
-  /** All Person records of a person: a skill on any of them counts as "already has it" (new ones go to the main record). */
-  const recordsOf = (personId: string) => persons.find((p) => p.id === personId)?.records.map((r) => r.id) ?? [personId];
+  /** The person's refId: creates read the person's records fresh (new ones go to the main record, any record counts). */
+  const refIdOf = (personId: string) => persons.find((p) => p.id === personId)?.refId ?? personId;
 
   const run = async (work: () => Promise<void>) => {
     if (operationRef.current) return;
@@ -99,7 +99,7 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
     run(async () => {
       if (!definition || dateError || plan.toAssign.length === 0 || plan.overLimit) return;
       // Also the persons shown as having the skill: FSM decides, and skips them without a write.
-      const done = await bulkAssign(definition.id, plan.send, input, (i, total) => setProgress(t("bulk.progress", { i: i + 1, total })), recordsOf);
+      const done = await bulkAssign(definition.id, plan.send, input, (i, total) => setProgress(t("bulk.progress", { i: i + 1, total })), refIdOf);
       setResults(done);
       const assigned = done.filter((r) => r.result === "assigned").length;
       if (assigned) toast(tn("bulk.toastAssigned", assigned, { skill: definition.name }));
@@ -109,14 +109,14 @@ export function BulkAssignDialog({ persons, state, onClose }: BulkAssignDialogPr
     run(async () => {
       if (!definition || !results) return;
       setProgress(t("bulk.tryingAgain"));
-      setResults(mergeResults(results, await retryBulk(definition.id, results.filter((r) => r.result === "failed"), input, recordsOf)));
+      setResults(mergeResults(results, await retryBulk(definition.id, results.filter((r) => r.result === "failed"), input, refIdOf)));
     });
 
   const checkAgain = () =>
     run(async () => {
       if (!definition || !results) return;
       setProgress(t("common.checkingFsm"));
-      setResults(mergeResults(results, await recheckBulk(definition.id, results.filter((r) => r.result === "unconfirmed"))));
+      setResults(mergeResults(results, await recheckBulk(definition.id, results.filter((r) => r.result === "unconfirmed"), refIdOf)));
     });
 
   const failedCount = results?.filter((r) => r.result === "failed").length ?? 0;

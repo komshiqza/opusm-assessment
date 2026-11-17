@@ -6,7 +6,7 @@ import { getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { effectiveStartDate, validityProblem } from "@/lib/domain/validation";
 import { CERTIFICATE_ACCEPT, MAX_CERTIFICATE_LABEL, splitCertificateFiles } from "@/lib/domain/certificateRules";
-import { checkAssignmentCreated, deleteAssignment, updateAssignment } from "@/lib/skills/repository";
+import { checkAssignmentCreatedForPerson, deleteAssignment, updateAssignment } from "@/lib/skills/repository";
 import { createAssignmentWithCertificates, recheckUploads, retryItems, uploadCertificates } from "@/lib/skills/certificates";
 import { toUserMessage } from "@/lib/errors";
 import { FsmTimeoutError } from "@/lib/fsm/client";
@@ -155,9 +155,8 @@ export function AssignmentDialog({ person, definition, state, recordId, onClose 
       setProgress("Assigning…");
       let result: Awaited<ReturnType<typeof createAssignmentWithCertificates>>;
       try {
-        // Always on the person's main record; a skill on any of their records counts as "already has it".
-        const records = person.records.map((r) => r.id);
-        result = await createAssignmentWithCertificates(definition.id, person.id, input, pendingFiles, showProgress, records);
+        // On the person's current main record (read fresh by refId); a skill on any of their records counts as "already has it".
+        result = await createAssignmentWithCertificates(definition.id, person.refId, input, pendingFiles, showProgress);
       } catch (e) {
         // FSM did not answer the create: look once whether it arrived. Never created again by itself.
         if (e instanceof FsmTimeoutError && e.write) {
@@ -188,7 +187,7 @@ export function AssignmentDialog({ person, definition, state, recordId, onClose 
    */
   const checkCreate = async (): Promise<boolean> => {
     setProgress(t("assign.checkingCreate"));
-    const check = await checkAssignmentCreated(definition.id, person.id);
+    const check = await checkAssignmentCreatedForPerson(definition.id, person.refId);
     if (check.result === "notDone") {
       setCreateCheck({ result: "notDone" });
       return false;

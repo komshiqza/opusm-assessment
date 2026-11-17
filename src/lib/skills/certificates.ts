@@ -9,7 +9,7 @@ import { inspectCertificateFile } from "@/lib/domain/certificateRules";
 import { toUserMessage } from "@/lib/errors";
 import { t } from "@/lib/i18n/t";
 import type { AssignmentInput, Certificate } from "./types";
-import { assertOwnAttachment, assertOwnSkill, createAssignment, toCertificate, type WriteCheck } from "./repository";
+import { assertOwnAttachment, assertOwnSkill, createAssignmentForPerson, toCertificate, type WriteCheck } from "./repository";
 import type { Assignment } from "./types";
 
 /** Uploads one file. `uploadId` goes into the description, so a check after a timeout can find this upload. */
@@ -159,13 +159,13 @@ export async function recheckUploads(assignmentId: string, unconfirmed: UploadOu
  */
 export async function createAssignmentWithCertificates(
   tagId: string,
-  personId: string,
+  /** The person's refId: the assignment goes to the person's current main record (see createAssignmentForPerson). */
+  personRefId: string,
   input: AssignmentInput,
   files: File[],
   onProgress?: (file: File, index: number, total: number) => void,
-  personRecords: string[] = [personId],
 ): Promise<{ assignment: Assignment } & UploadOutcome> {
-  const assignment = await createAssignment(tagId, personId, input, personRecords);
+  const assignment = await createAssignmentForPerson(tagId, personRefId, input);
   return { assignment, ...(await uploadCertificates(assignment.id, files, onProgress)) };
 }
 

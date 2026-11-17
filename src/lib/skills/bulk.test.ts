@@ -68,7 +68,11 @@ describe("assign one skill to several persons", () => {
   it("skips a person whose linked (Employee) record already holds the skill, without a write", async () => {
     const employeeRecord = "E".repeat(32);
     alreadyHave = new Set([employeeRecord]);
-    const results = await bulkAssign(OWN_TAG, [people[0]], input, undefined, (id) => [id, employeeRecord]);
+    fsm.personRecords = (refId) => [
+      { id: refId, refId, type: "ERPUSER", inactive: false },
+      { id: employeeRecord, refId, type: "EMPLOYEE", inactive: false },
+    ];
+    const results = await bulkAssign(OWN_TAG, [people[0]], input);
     expect(results.map((r) => r.result)).toEqual(["skipped"]);
     expect(creates()).toEqual([]);
   });

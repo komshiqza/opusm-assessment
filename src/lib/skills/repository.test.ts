@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { OwnershipError } from "@/lib/fsm/guard";
-import { AssignmentExistsError, createAssignment, createSkillDefinition, deleteAssignment, deleteSkillDefinition, DeleteImpactChangedError, updateAssignment, updateSkillDefinition } from "./repository";
+import { AssignmentExistsError, createAssignment, createAssignmentForPerson, createSkillDefinition, deleteAssignment, deleteSkillDefinition, DeleteImpactChangedError, updateAssignment, updateSkillDefinition } from "./repository";
 import { deleteCertificate, uploadCertificate } from "./certificates";
 import { installFakeFsm, fsm, writes, tagNamed, skillOfTag, pdf, NOTHING_CONFIRMED, DEMO_TAG, OWN_TAG, SKILL, ATTACHMENT, PERSON } from "./fakeFsm";
 
@@ -322,6 +322,55 @@ describe("own data", () => {
     // Without the person's other records the check would miss it and create a second assignment.
     await createAssignment(OWN_TAG, PERSON, input);
     expect(writes().map((c) => (c.body as { technician: string }[])[0].technician)).toEqual([PERSON]);
+  });
+
+  describe("createAssignmentForPerson (reads the person's records fresh from FSM by refId)", () => {
+    const REF = "F".repeat(32);
+    const ERP = "A".repeat(31) + "1";
+    const EMP = "A".repeat(31) + "2";
+    const input = { startDate: "2026-11-17", endDate: null, proficiencyId: null };
+    const records = (rows: { id: string; type: string; inactive: boolean }[]) => (refId: string) => (refId === REF ? rows.map((r) => ({ ...r, refId })) : []);
+    const technicians = () => writes().filter((c) => c.path === "skill/v2/skills").map((c) => (c.body as { technician: string }[])[0].technician);
+
+    it("creates on the main record FSM has now (here the ERP user record became active since the page loaded)", async () => {
+      fsm.searchAnswer = (path) => (path === "skill/v1/tags/search" ? [{ id: OWN_TAG, name: "komshiqza::Welding" }] : []);
+      fsm.personRecords = records([
+        { id: EMP, type: "EMPLOYEE", inactive: false },
+        { id: ERP, type: "ERPUSER", inactive: false },
+      ]);
+      await createAssignmentForPerson(OWN_TAG, REF, input);
+      expect(technicians()).toEqual([ERP]);
+    });
+
+    it("writes nothing when a record that appeared since the page loaded already holds the skill", async () => {
+      fsm.personRecords = records([
+        { id: ERP, type: "ERPUSER", inactive: false },
+        { id: EMP, type: "EMPLOYEE", inactive: false },
+      ]);
+      fsm.searchAnswer = (path, filter) => {
+        if (path === "skill/v1/tags/search") return [{ id: OWN_TAG, name: "komshiqza::Welding" }];
+        const technician = filter.find((f) => f.field === "technicianId")?.value;
+        return path === "skill/v1/skills/search" && technician === EMP ? [{ id: SKILL, tagId: OWN_TAG, tagName: "komshiqza::Welding", technicianId: EMP }] : [];
+      };
+      await expect(createAssignmentForPerson(OWN_TAG, REF, input)).rejects.toBeInstanceOf(AssignmentExistsError);
+      expect(writes()).toEqual([]);
+    });
+
+    it("writes nothing when the person's records cannot be read (fail closed)", async () => {
+      fsm.searchAnswer = (path) => (path === "skill/v1/tags/search" ? [{ id: OWN_TAG, name: "komshiqza::Welding" }] : []);
+      fsm.personRecords = () => {
+        throw new Error("simulated outage");
+      };
+      await expect(createAssignmentForPerson(OWN_TAG, REF, input)).rejects.toThrow();
+      expect(writes()).toEqual([]);
+    });
+
+    it("writes nothing when the person has no active record any more", async () => {
+      fsm.searchAnswer = (path) => (path === "skill/v1/tags/search" ? [{ id: OWN_TAG, name: "komshiqza::Welding" }] : []);
+      fsm.personRecords = records([{ id: ERP, type: "ERPUSER", inactive: true }]);
+      await expect(createAssignmentForPerson(OWN_TAG, REF, input)).rejects.toThrow();
+      expect(writes()).toEqual([]);
+    });
   });
 
   it("rejects invalid dates before asking FSM anything", async () => {

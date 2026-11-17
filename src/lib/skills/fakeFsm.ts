@@ -39,12 +39,14 @@ export const fsm = {
   contentFails: false,
   /** A hanging upload is still stored (the write arrived, only the answer is lost). */
   hangingUploadsArrive: false,
-  /** CoreSQL queries fail. */
+  /** CoreSQL queries fail (all but the Person lookup by refId, which `personRecords` answers). */
   queriesFail: false,
   /** Skill Service writes to this path never get an answer (e.g. "skill/v2/skills"). */
   hangingWrite: null as string | null,
   /** Answer of bulk (v2) writes; default: every item succeeded. */
   bulkAnswer: (() => null) as BulkAnswer,
+  /** The Person records of a person (query by refId); default as SAP has it for a plain ERP user: one record, id = refId. */
+  personRecords: ((refId: string) => [{ id: refId, refId, type: "ERPUSER", inactive: false }]) as (refId: string) => { id: string; refId: string; type: string; inactive: boolean }[],
 };
 
 function json(data: unknown, status = 200) {
@@ -62,6 +64,8 @@ async function fakeFetch(input: string, init: RequestInit = {}): Promise<Respons
   fsm.calls.push({ method, path, body });
 
   if (path.startsWith("data/v4/Attachment/") && method === "DELETE") fsm.deletedAttachments.add(path.split("/")[3]);
+  const personByRef = path === "query/v1" ? /FROM Person p WHERE p\.refId = '([0-9A-F]{32})'/i.exec(body.query) : null;
+  if (personByRef) return json({ data: fsm.personRecords(personByRef[1]).map((p) => ({ p })), lastPage: 1 });
   if (path === "query/v1" && fsm.queriesFail) return json({ error: "simulated outage" }, 503);
   if (path === "query/v1") {
     const rows = fsm.queryAnswer(body.query).filter((r) => !fsm.deletedAttachments.has((r as { a?: { id: string } }).a?.id ?? ""));
@@ -115,6 +119,7 @@ export function installFakeFsm(): void {
       queriesFail: false,
       hangingWrite: null,
       bulkAnswer: () => null,
+      personRecords: (refId: string) => [{ id: refId, refId, type: "ERPUSER", inactive: false }],
     });
     vi.stubGlobal("fetch", fakeFetch);
   });

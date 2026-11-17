@@ -30,7 +30,7 @@ export interface PersonRecordRow extends PersonRecord {
 export const cellKey = (personId: string, tagId: string) => `${personId}|${tagId}`;
 
 /** The main record, among the active ones: ERPUSER, else the one that references itself, else the first. */
-function mainRecord(records: PersonRecordRow[], refId: string): PersonRecordRow | undefined {
+export function mainRecord(records: PersonRecordRow[], refId: string): PersonRecordRow | undefined {
   const active = records.filter((r) => !r.inactive);
   return active.find((r) => r.type === "ERPUSER") ?? active.find((r) => r.id === refId) ?? active[0];
 }
