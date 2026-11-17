@@ -160,7 +160,7 @@ export const en = {
   "find.enterJobDate": "Please enter the job date.",
   "find.checkDate": "Check the job date",
   "find.chooseTitle": "Choose the skills the job needs",
-  "find.chooseHint": "You will see who can do the job on that day, and who falls short on one skill: expired, not valid yet, or below the required level.",
+  "find.chooseHint": "The app then shows who can do the job on that day.",
   "find.validOnJobDay": "Valid on job day",
   "find.endsOn": "Ends {date}",
   "find.startsOn": "Starts {date}",

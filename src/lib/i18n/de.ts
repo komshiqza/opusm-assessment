@@ -159,7 +159,7 @@ export const de: Record<MessageKey, string> = {
   "find.enterJobDate": "Bitte geben Sie das Einsatzdatum ein.",
   "find.checkDate": "Einsatzdatum prüfen",
   "find.chooseTitle": "Wählen Sie die für den Einsatz erforderlichen Qualifikationen",
-  "find.chooseHint": "Sie sehen, wer den Einsatz an diesem Tag übernehmen kann und bei wem eine Qualifikation noch nicht reicht: abgelaufen, noch nicht gültig oder unter der verlangten Stufe.",
+  "find.chooseHint": "Die App zeigt dann, wer den Einsatz an diesem Tag übernehmen kann.",
   "find.validOnJobDay": "Am Einsatztag gültig",
   "find.endsOn": "Gültig bis {date}",
   "find.startsOn": "Gültig ab {date}",
