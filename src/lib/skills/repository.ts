@@ -423,18 +423,23 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
   await assertNoCertificateLeft([assignmentId]); // the removal itself is complete: nothing to try again
 }
 
+/** All Person records of a person (also inactive ones), as FSM has them now. */
+async function personRecordsByRef(refId: string) {
+  assertFsmId(refId);
+  const rows = await fsmQuery<{ p: Pick<FsmPerson, "id" | "type" | "inactive"> & { refId?: string | null } }>(
+    `SELECT p.id, p.refId, p.type, p.inactive FROM Person p WHERE p.refId = '${refId}'`,
+    ["Person"],
+  );
+  return rows.map(({ p }) => ({ id: p.id, refId: p.refId ?? null, type: p.type ?? null, inactive: Boolean(p.inactive) }));
+}
+
 /**
  * The person's Person records as FSM has them now (by refId, SAP's key for one human), with the
  * current main record. The page's copy can be out of date: a record may have become (in)active, or a
  * linked record may have appeared, since it loaded.
  */
 async function currentPersonRecords(refId: string): Promise<{ mainId: string; recordIds: string[] }> {
-  assertFsmId(refId);
-  const rows = await fsmQuery<{ p: Pick<FsmPerson, "id" | "type" | "inactive"> & { refId?: string | null } }>(
-    `SELECT p.id, p.refId, p.type, p.inactive FROM Person p WHERE p.refId = '${refId}'`,
-    ["Person"],
-  );
-  const records = rows.map(({ p }) => ({ id: p.id, refId: p.refId ?? null, type: p.type ?? null, inactive: Boolean(p.inactive) }));
+  const records = await personRecordsByRef(refId);
   const main = mainRecord(records, refId);
   if (!main) throw new Error(t("assign.noActiveRecord"));
   assertFsmId(main.id);
@@ -451,11 +456,22 @@ export async function createAssignmentForPerson(tagId: string, refId: string, in
   return createAssignment(tagId, mainId, input, recordIds);
 }
 
-/** Did a timed-out create for this person arrive? Looks on the person's current main record. Reads only. */
+/**
+ * Did a timed-out create for this person arrive? Looks on all of the person's records (also inactive
+ * ones): the main record may have changed while FSM did not answer. A create is only sent when none of
+ * them held the skill, so exactly one found is the new one; two or more cannot be told apart. Reads only.
+ */
 export async function checkAssignmentCreatedForPerson(tagId: string, refId: string): Promise<WriteCheck<Assignment>> {
   try {
-    const { mainId } = await currentPersonRecords(refId);
-    return await checkAssignmentCreated(tagId, mainId);
+    const found: Assignment[] = [];
+    for (const record of await personRecordsByRef(refId)) {
+      const check = await checkAssignmentCreated(tagId, record.id);
+      if (check.result === "unconfirmed") return check;
+      if (check.result === "done") found.push(check.value);
+    }
+    if (found.length === 0) return { result: "notDone" };
+    if (found.length === 1) return { result: "done", value: found[0] };
+    return { result: "unconfirmed", error: t("assign.unexpected") };
   } catch (e) {
     return { result: "unconfirmed", error: toUserMessage(e) };
   }

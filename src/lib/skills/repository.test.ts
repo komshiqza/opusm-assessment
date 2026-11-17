@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { OwnershipError } from "@/lib/fsm/guard";
-import { AssignmentExistsError, createAssignment, createAssignmentForPerson, createSkillDefinition, deleteAssignment, deleteSkillDefinition, DeleteImpactChangedError, updateAssignment, updateSkillDefinition } from "./repository";
+import { AssignmentExistsError, checkAssignmentCreatedForPerson, createAssignment, createAssignmentForPerson, createSkillDefinition, deleteAssignment, deleteSkillDefinition, DeleteImpactChangedError, updateAssignment, updateSkillDefinition } from "./repository";
 import { deleteCertificate, uploadCertificate } from "./certificates";
 import { installFakeFsm, fsm, writes, tagNamed, skillOfTag, pdf, NOTHING_CONFIRMED, DEMO_TAG, OWN_TAG, SKILL, ATTACHMENT, PERSON } from "./fakeFsm";
 
@@ -354,6 +354,38 @@ describe("own data", () => {
       };
       await expect(createAssignmentForPerson(OWN_TAG, REF, input)).rejects.toBeInstanceOf(AssignmentExistsError);
       expect(writes()).toEqual([]);
+    });
+
+    const skillOn = (recordIds: string[]) => (path: string, filter: { field: string; value: unknown }[]) => {
+      const technician = filter.find((f) => f.field === "technicianId")?.value as string;
+      return path === "skill/v1/skills/search" && recordIds.includes(technician)
+        ? [{ id: `${SKILL.slice(0, 31)}${recordIds.indexOf(technician)}`, tagId: OWN_TAG, tagName: "komshiqza::Welding", technicianId: technician }]
+        : [];
+    };
+
+    it("after a timeout finds the new assignment on any of the person's records (the main one may have changed meanwhile)", async () => {
+      // Created on the ERP user record, which became inactive before the check: the main is now the Employee record.
+      fsm.personRecords = records([
+        { id: ERP, type: "ERPUSER", inactive: true },
+        { id: EMP, type: "EMPLOYEE", inactive: false },
+      ]);
+      fsm.searchAnswer = skillOn([ERP]);
+      await expect(checkAssignmentCreatedForPerson(OWN_TAG, REF)).resolves.toMatchObject({ result: "done", value: { personId: ERP } });
+    });
+
+    it("after a timeout says 'not confirmed' when two of the person's records hold the skill, never a guess", async () => {
+      fsm.personRecords = records([
+        { id: ERP, type: "ERPUSER", inactive: false },
+        { id: EMP, type: "EMPLOYEE", inactive: false },
+      ]);
+      fsm.searchAnswer = skillOn([ERP, EMP]);
+      await expect(checkAssignmentCreatedForPerson(OWN_TAG, REF)).resolves.toMatchObject({ result: "unconfirmed" });
+    });
+
+    it("after a timeout says 'not done' when none of the person's records holds it", async () => {
+      fsm.personRecords = records([{ id: ERP, type: "ERPUSER", inactive: false }]);
+      fsm.searchAnswer = () => [];
+      await expect(checkAssignmentCreatedForPerson(OWN_TAG, REF)).resolves.toEqual({ result: "notDone" });
     });
 
     it("writes nothing when the person's records cannot be read (fail closed)", async () => {

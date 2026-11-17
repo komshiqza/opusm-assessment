@@ -35,8 +35,8 @@ interface AssignmentDialogProps {
 /** Assign a skill, change level and validity, remove it, and manage its certificates. */
 export function AssignmentDialog({ person, definition, state, recordId, onClose }: AssignmentDialogProps) {
   const toast = useToast();
-  /** Fixed when the dialog opens, so a reload can never switch it to another record's assignment. */
-  const [record] = useState(() => pinnedRecordId(recordId, state.assignmentByCell.get(cellKey(person.id, definition.id)), person.id));
+  /** Fixed when the dialog opens (moved only to where its own create landed), so a reload never switches records. */
+  const [record, setRecord] = useState(() => pinnedRecordId(recordId, state.assignmentByCell.get(cellKey(person.id, definition.id)), person.id));
   const listedAssignment = state.assignmentByRecord.get(cellKey(record, definition.id));
   /** Set when this dialog removed the assignment; the list may still show it if the reload failed. */
   const [removed, setRemoved] = useState(false);
@@ -167,6 +167,8 @@ export function AssignmentDialog({ person, definition, state, recordId, onClose 
       }
       setCreateCheck(null);
       setCreatedId(result.assignment.id);
+      // The create went to the person's current main record, which may differ from the page's: follow it.
+      setRecord(result.assignment.personId);
       setPendingFiles([]);
       setUploadResults((current) => applyOutcome(current, result, null));
       setProgress("Refreshing…");
@@ -197,6 +199,7 @@ export function AssignmentDialog({ person, definition, state, recordId, onClose 
       return true;
     }
     setCreatedId(check.value.id);
+    setRecord(check.value.personId); // the record the late create landed on
     setCreateCheck({ result: "done" });
     setProgress("Refreshing…");
     if (!(await state.reload())) setNotRefreshed({ done: t("assign.doneAssigned"), close: pendingFiles.length === 0 });
