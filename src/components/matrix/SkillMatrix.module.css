@@ -205,6 +205,8 @@
 
 /* "Show each FSM record": a linked record's cell, read-only (what it holds, else a dash). */
 .cellLocked {
+  /* Holds its screen-reader text: otherwise that text sits outside the scrolling table and makes the page taller. */
+  position: relative;
   display: grid;
   align-items: center;
   min-height: 2.75rem;
