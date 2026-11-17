@@ -180,6 +180,7 @@
 
 .personName {
   display: block;
+  font-size: var(--sapFontSize);
   font-weight: bold;
   color: var(--sapTextColor);
 }
@@ -196,10 +197,31 @@
   background: var(--sapList_AlternatingBackground);
 }
 
-/* After the stripes on purpose: hover wins on striped rows too. */
-.table tbody tr:hover .personCell,
-.table tbody tr:hover .cell {
+/* After the stripes on purpose: hover wins on striped rows too. A linked record's row has no hover: nothing to do there. */
+.table tbody tr:not([aria-disabled="true"]):hover .personCell,
+.table tbody tr:not([aria-disabled="true"]):hover .cell {
   background: var(--sapList_Hover_Background);
+}
+
+/* "Show each FSM record": a linked record's cell, read-only (what it holds, else a dash). */
+.cellLocked {
+  display: grid;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.5rem;
+  font-size: var(--sapFontSmallSize);
+  color: var(--sapContent_LabelColor);
+  cursor: default;
+}
+
+/* Read by screen readers only (the locked cell's full description). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .cell {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_JOB_TITLE } from "@/lib/domain/jobTitleFilter";
-import { countStatuses, filterMatrixRows, peopleTitle, toStatusFilter } from "./matrixRows";
+import { setRenderedLanguage } from "@/lib/i18n/language";
+import { countStatuses, filterMatrixRows, heldElsewhere, isLockedRow, matrixRows, peopleTitle, recordLabel, toStatusFilter } from "./matrixRows";
 
 const rows = [
   { id: "anna", name: "Anna Schneider", jobTitle: "Service Technician" },
@@ -94,5 +95,82 @@ describe("peopleTitle (the title of the matrix table: Fiori title with item coun
 
   it("drops the counter when no row is shown", () => {
     expect(peopleTitle(0)).toBe("People");
+  });
+});
+
+describe("matrixRows (one row per person, or per FSM Person record with 'Show each FSM record')", () => {
+  const anna = {
+    id: "ANNA-ERP",
+    name: "Anna Schneider",
+    jobTitle: "Service Technician",
+    refId: "ANNA-EMP",
+    records: [
+      { id: "ANNA-ERP", type: "ERPUSER" },
+      { id: "ANNA-EMP", type: "EMPLOYEE" },
+    ],
+  };
+  const admin = { id: "ADMIN", name: "admin", jobTitle: null, refId: "ADMIN", records: [{ id: "ADMIN", type: "EMPLOYEE" }] };
+
+  it("off (the default view): one row per person, read through the person's cells", () => {
+    const rows = matrixRows([anna, admin], false);
+    expect(rows.map((r) => [r.id, r.name, r.record])).toEqual([
+      ["ANNA-ERP", "Anna Schneider", undefined],
+      ["ADMIN", "admin", undefined],
+    ]);
+    expect(rows.some(isLockedRow)).toBe(false);
+  });
+
+  it("on: one row per record, main record first, each with its type; only secondary records are locked", () => {
+    const rows = matrixRows([anna, admin], true);
+    expect(rows.map((r) => [r.id, r.person.id, r.record?.type, r.record?.main, isLockedRow(r)])).toEqual([
+      ["ANNA-ERP", "ANNA-ERP", "ERPUSER", true, false],
+      ["ANNA-EMP", "ANNA-ERP", "EMPLOYEE", false, true],
+      ["ADMIN", "ADMIN", "EMPLOYEE", true, false],
+    ]);
+    // The person's job title and name stay on every record row, so the filters apply to them too.
+    expect(filterMatrixRows(rows, { query: "", jobTitles: ["Service Technician"], statusFilter: "all", skills, statusOf }).map((r) => r.id)).toEqual(["ANNA-ERP", "ANNA-EMP"]);
+  });
+
+  it("labels a record row with its type; a secondary record says where skills are kept", () => {
+    const [main, secondary, own] = matrixRows([anna, admin], true);
+    expect(recordLabel(main)).toBe("ERP user");
+    expect(recordLabel(secondary)).toBe("Employee · skills are kept on the ERP user record");
+    expect(recordLabel(own)).toBe("Employee");
+    expect(recordLabel(matrixRows([anna], false)[0])).toBe("");
+    setRenderedLanguage("de");
+    expect(recordLabel(secondary)).toBe("Mitarbeiter · Qualifikationen werden auf dem ERP-Benutzer-Eintrag geführt");
+    setRenderedLanguage("en");
+  });
+
+  it("titles the table by what its rows are", () => {
+    expect(peopleTitle(26, true)).toBe("Person records (26)");
+    expect(peopleTitle(0, true)).toBe("Person records");
+  });
+});
+
+describe("heldElsewhere (a main-record cell when the person holds the skill on a linked record)", () => {
+  const anna = {
+    id: "ANNA-ERP",
+    name: "Anna Schneider",
+    jobTitle: null,
+    refId: "ANNA-EMP",
+    records: [
+      { id: "ANNA-ERP", type: "ERPUSER" },
+      { id: "ANNA-EMP", type: "EMPLOYEE" },
+    ],
+  };
+  const [personRow] = matrixRows([anna], false);
+  const [mainRow, linkedRow] = matrixRows([anna], true);
+  const onEmployee = { personId: "ANNA-EMP" };
+  const onMain = { personId: "ANNA-ERP" };
+
+  it.each([
+    ["main record row, nothing on it, the skill on the Employee record", mainRow, undefined, onEmployee, onEmployee],
+    ["main record row holding the skill itself", mainRow, onMain, onMain, undefined],
+    ["main record row, the person has no such skill", mainRow, undefined, undefined, undefined],
+    ["linked record row (read-only anyway)", linkedRow, undefined, onEmployee, undefined],
+    ["person row (the cell already shows the person's skill)", personRow, onEmployee, onEmployee, undefined],
+  ] as const)("%s", (_case, row, own, personsCell, expected) => {
+    expect(heldElsewhere(row, own, personsCell)).toBe(expected);
   });
 });
