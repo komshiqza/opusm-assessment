@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_JOB_TITLE } from "@/lib/domain/jobTitleFilter";
-import { filterMatrixRows, peopleTitle } from "./matrixRows";
+import { filterMatrixRows, peopleTitle, toStatusFilter } from "./matrixRows";
 
 const rows = [
   { id: "anna", name: "Anna Schneider", jobTitle: "Service Technician" },
@@ -41,6 +41,20 @@ describe("filterMatrixRows (the rows the matrix, the CSV export and Bulk assign 
     expect(ids({ jobTitles: ["Service Technician", "Electrician"], statusFilter: "expired" })).toEqual(["anna", "eli"]);
     // With only First aid shown, Eli's expired Welding no longer counts.
     expect(ids({ jobTitles: ["Service Technician", "Electrician"], statusFilter: "expired", skills: [{ id: "AID" }] })).toEqual(["anna"]);
+  });
+});
+
+describe("toStatusFilter (the stored counter filter; the counters are the only status filter)", () => {
+  it.each(["expiring", "expired", "valid", "upcoming"] as const)("keeps the counter status %s", (status) => {
+    expect(toStatusFilter(status)).toBe(status);
+  });
+
+  it("falls back to all for a stale 'none' from the removed Status dropdown: no hidden filter stays active", () => {
+    expect(toStatusFilter("none")).toBe("all");
+  });
+
+  it.each([["all"], [undefined], [""], ["unknown"]])("reads %s as all", (value) => {
+    expect(toStatusFilter(value)).toBe("all");
   });
 });
 

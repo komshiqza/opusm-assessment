@@ -74,10 +74,16 @@
   height: 1rem;
 }
 
+/*
+ * Next to the table title, filling the room up to the table actions. When that room is short, its
+ * text wraps inside it, so it never pushes the actions onto a line of their own.
+ */
 .legend {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  flex: 1 1 0;
+  min-width: min(12rem, 100%);
   color: var(--sapContent_LabelColor);
   font-size: var(--sapFontSmallSize);
 }

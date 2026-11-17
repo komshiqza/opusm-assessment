@@ -10,12 +10,10 @@ import {
   Link,
   MultiComboBox,
   MultiComboBoxItem,
-  Option,
-  Select,
   Title,
   ToggleButton,
 } from "@ui5/webcomponents-react";
-import { getAssignmentStatus, type AssignmentStatus } from "@/lib/domain/status";
+import { getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { alsoOnNote, linkedRecordNote } from "@/lib/format";
 import { knownSkillIds } from "@/lib/domain/skillFilter";
@@ -27,15 +25,12 @@ import { usePageState } from "@/hooks/usePageState";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
-import { filterMatrixRows, peopleTitle } from "./matrixRows";
+import { COUNTER_STATUSES, filterMatrixRows, peopleTitle, toStatusFilter, type StatusFilter } from "./matrixRows";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
 import styles from "./SkillMatrix.module.css";
 
-type StatusFilter = "all" | AssignmentStatus;
-
-/** The status counters are filter buttons, coloured like their status (always with icon and text). */
-const COUNTER_STATUSES = ["expiring", "expired", "valid", "upcoming"] as const;
+/** The status counters are the status filter, coloured like their status (always with icon and text). */
 const COUNTER_DESIGN = { expiring: "Attention", expired: "Negative", valid: "Positive", upcoming: "Default" } as const;
 
 interface SkillMatrixProps {
@@ -51,7 +46,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
   const [jobTitles, setJobTitles] = usePageState<string[]>("matrix.jobTitles", []);
-  const [statusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
+  const [storedStatusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
+  const statusFilter = toStatusFilter(storedStatusFilter);
   const today = useToday();
   const isPhone = useMediaQuery(PHONE_QUERY);
   /** Below 1280 px: icon plus short date, narrower columns (the phone has its own cards). */
@@ -167,6 +163,13 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
       </span>
     );
 
+  /** What the paperclip means and how to open a cell; next to the table title (Fiori: title group on the left). */
+  const legend = (
+    <span className={styles.legend}>
+      <Icon name="attachment" className={styles.chipIcon} /> {t("matrix.legend")} · {isPhone ? t("matrix.legendPhone") : t("matrix.legendDesktop")}
+    </span>
+  );
+
   return (
     <div className={styles.wrapper}>
       <div className={styles.toolbar} role="search">
@@ -210,17 +213,6 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             ))}
           </MultiComboBox>
         </div>
-        <div className={styles.field}>
-          <Label for="matrix-status-filter">{t("common.status")}</Label>
-          <Select id="matrix-status-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.detail.selectedOption.value as StatusFilter)}>
-            <Option value="all">{t("matrix.statusAll")}</Option>
-            <Option value="expiring">{t("matrix.statusExpiring")}</Option>
-            <Option value="expired">{t("matrix.statusExpired")}</Option>
-            <Option value="valid">{t("matrix.statusValid")}</Option>
-            <Option value="upcoming">{t("matrix.statusUpcoming")}</Option>
-            <Option value="none">{t("matrix.statusNone")}</Option>
-          </Select>
-        </div>
         {filtersActive && (
           <Button
             design="Transparent"
@@ -251,10 +243,6 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             {tn(`matrix.counter.${s}`, counts[s])}
           </ToggleButton>
         ))}
-        <span className={styles.legend}>
-          <Icon name="attachment" className={styles.chipIcon} /> {t("matrix.legend")} ·{" "}
-          {isPhone ? t("matrix.legendPhone") : t("matrix.legendDesktop")}
-        </span>
       </div>
 
       {/* Table toolbar (Fiori: title with item counter on the left, the table's actions on the right). */}
@@ -262,6 +250,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
         <Title level="H4" id="matrix-title">
           {peopleTitle(visiblePersons.length)}
         </Title>
+        {!isPhone && legend}
         <div className={styles.tableActions}>
           <Button design="Transparent" icon="add-employee" onClick={() => setBulkOpen(true)} disabled={visiblePersons.length === 0}>
             {t("matrix.bulk")}
@@ -291,6 +280,9 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
           </Button>
         </div>
       </div>
+
+      {/* Phone: no room next to the title, so the legend gets its own line, right above the cards. */}
+      {isPhone && legend}
 
       {visiblePersons.length === 0 ? (
         <IllustratedMessage name="NoFilterResults" titleText={t("matrix.noMatch")} subtitleText={t("matrix.noMatchHint")} />
