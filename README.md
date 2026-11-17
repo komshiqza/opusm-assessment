@@ -8,6 +8,8 @@ Candidate namespace: `komshiqza::`
 
 ![Skill matrix](docs/screenshots/matrix.jpg)
 
+Live version: https://opusm-assessment.vercel.app (deployed automatically by Vercel on every push to `main`; the FSM credentials are Vercel environment variables, server only)
+
 ## Run it
 
 As in the template's quick start: Node.js 22 or newer, `npm install`, `cp .env.example .env.local` (set `NEXT_PUBLIC_CANDIDATE_ID=komshiqza`, leave the FSM values as they are), `npm run check:fsm`, `npm run dev`.
@@ -117,6 +119,7 @@ src/
 ## Limitations and open issues
 
 - Two people editing at the same time: the last save wins.
+- The live version uses the same shared credentials, so anyone with the link can change `komshiqza::` data; the server check keeps everything else read-only.
 - A write that FSM saves only after the app's check can still end up twice. The app checks again before every retry, which leaves only a narrow gap; closing it fully would need FSM to recognise repeated writes.
 - Files are checked by size and real type, not scanned for viruses. A real product would add a virus scanner on the server.
 - The catalogue counts assignments of inactive persons, which the matrix does not show.
