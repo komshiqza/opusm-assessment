@@ -5,6 +5,7 @@
 import "@ui5/webcomponents-react/dist/Assets.js";
 import "@ui5/webcomponents-icons/dist/AllIcons.js";
 // Illustrations for empty and error states (imported one by one to keep the bundle small).
+import "@ui5/webcomponents-fiori/dist/illustrations/BeforeSearch.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/NoData.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/NoEntries.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/NoFilterResults.js";

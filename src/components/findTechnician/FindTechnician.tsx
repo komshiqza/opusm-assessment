@@ -195,7 +195,8 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
 
       {required.length === 0 || !result ? (
         <IllustratedMessage
-          name="NoData"
+          // Nothing searched yet: SAP's "BeforeSearch" illustration; an invalid job date keeps "NoData".
+          name={dateError ? "NoData" : "BeforeSearch"}
           titleText={dateError ? t("find.checkDate") : t("find.chooseTitle")}
           subtitleText={dateError ?? t("find.chooseHint")}
         />
