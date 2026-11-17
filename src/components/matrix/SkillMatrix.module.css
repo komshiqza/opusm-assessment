@@ -428,6 +428,14 @@
   border-top: 1px solid var(--sapList_BorderColor);
 }
 
+/* Secondary on a phone card: the job title's look (small, grey, normal weight), still a 44 px tap target. */
+.cardMissing::part(header) {
+  min-height: 2.75rem;
+  font-family: var(--sapFontFamily);
+  font-size: var(--sapFontSmallSize);
+  color: var(--sapContent_LabelColor);
+}
+
 .cardMissingChips {
   display: flex;
   flex-wrap: wrap;
