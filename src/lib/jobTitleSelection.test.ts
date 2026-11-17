@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_JOB_TITLE, NO_JOB_TITLE, jobTitleOptions, matchesJobTitles, selectedJobTitles } from "@/lib/domain/jobTitleFilter";
-import { parseJobTitleSelection } from "./jobTitleSelection";
+import { parseJobTitleSelection, recordViewTitles } from "./jobTitleSelection";
 
 describe("parseJobTitleSelection", () => {
   it("means no stored choice (null) when nothing valid is stored", () => {
@@ -134,5 +134,18 @@ describe("storage (fresh module per test, as on a page load)", () => {
         expect(await shownOf(await load())).toEqual(["Service Technician"]);
       }
     });
+  });
+});
+
+describe("recordViewTitles ('Show each FSM record' lists every record, so it sets the Job title choice aside)", () => {
+  it.each([
+    ["on, from the default (nothing stored)", true, "", null, { stored: "[]", setAside: "" }],
+    ["on, from a chosen title", true, '["Electrician"]', null, { stored: "[]", setAside: '["Electrician"]' }],
+    ["off, untouched meanwhile: the default comes back", false, "[]", "", { stored: "", setAside: null }],
+    ["off, untouched meanwhile: the chosen title comes back", false, "[]", '["Electrician"]', { stored: '["Electrician"]', setAside: null }],
+    ["off, after the user picked a title in the record view: theirs stays", false, '["Dispatcher"]', "", { stored: '["Dispatcher"]', setAside: null }],
+    ["off, nothing set aside (e.g. after a reload)", false, "[]", null, { stored: "[]", setAside: null }],
+  ] as const)("%s", (_case, on, stored, setAside, expected) => {
+    expect(recordViewTitles(on, stored, setAside)).toEqual(expected);
   });
 });

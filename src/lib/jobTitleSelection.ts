@@ -64,3 +64,20 @@ export function resetJobTitles(): void {
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
+
+/**
+ * "Show each FSM record" lists every record, so turning it on sets the Job title choice aside (the
+ * stored value becomes "[]": everyone, and the chip disappears). Turning it off brings the choice back,
+ * unless the user picked titles meanwhile. `stored`: the raw stored value ("" = nothing stored).
+ */
+export function recordViewTitles(on: boolean, stored: string, setAside: string | null): { stored: string; setAside: string | null } {
+  if (on) return { stored: "[]", setAside: stored };
+  return { stored: setAside !== null && stored === "[]" ? setAside : stored, setAside: null };
+}
+
+/** Writes a raw stored value back: "" or a malformed one means nothing stored (the start selection). */
+export function restoreStoredJobTitles(raw: string): void {
+  const titles = parseJobTitleSelection(raw);
+  if (titles === null) resetJobTitles();
+  else saveJobTitles(titles);
+}

@@ -24,7 +24,15 @@ import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { useFillHeight } from "@/hooks/useFillHeight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
-import { parseJobTitleSelection, readStoredJobTitles, resetJobTitles, saveJobTitles, subscribeJobTitles } from "@/lib/jobTitleSelection";
+import {
+  parseJobTitleSelection,
+  readStoredJobTitles,
+  recordViewTitles,
+  resetJobTitles,
+  restoreStoredJobTitles,
+  saveJobTitles,
+  subscribeJobTitles,
+} from "@/lib/jobTitleSelection";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
@@ -74,6 +82,15 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   /** "Show each FSM record": one row per Person record. Off on every load; desktop and tablet only (phone cards stay per person). */
   const [eachRecordChoice, setEachRecord] = usePageState("matrix.eachRecord", false);
   const eachRecord = eachRecordChoice && !isPhone;
+  /** The Job title choice set aside while every record is listed; it comes back when the switch goes off. */
+  const [titlesSetAside, setTitlesSetAside] = usePageState<string | null>("matrix.titlesSetAside", null);
+  const switchEachRecord = (on: boolean) => {
+    const stored = readStoredJobTitles();
+    const next = recordViewTitles(on, stored, titlesSetAside);
+    if (next.stored !== stored) restoreStoredJobTitles(next.stored);
+    setTitlesSetAside(next.setAside);
+    setEachRecord(on);
+  };
 
   const definitions = useMemo(() => data?.definitions ?? [], [data]);
   /** The skill filter without skills deleted meanwhile; a filter on only deleted skills means "all skills". */
@@ -293,7 +310,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
         {!isPhone && legend}
         <div className={styles.tableActions}>
           {!isPhone && (
-            <CheckBox text={t("matrix.eachRecord", { n: recordTotal })} checked={eachRecordChoice} onChange={(e) => setEachRecord(e.target.checked)} />
+            <CheckBox text={t("matrix.eachRecord", { n: recordTotal })} checked={eachRecordChoice} onChange={(e) => switchEachRecord(e.target.checked)} />
           )}
           {/* Record rows are for reading the matrix; Bulk assign and the CSV export work on people, so they wait for the people view. */}
           {!eachRecord && (
