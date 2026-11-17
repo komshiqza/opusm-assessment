@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Bar, BusyIndicator, Button, Dialog, Input, Label, MessageStrip, TextArea } from "@ui5/webcomponents-react";
+import { useEffect, useRef, useState } from "react";
+import { Bar, BusyIndicator, Button, Dialog, Input, Label, MessageStrip, TextArea, type InputDomRef } from "@ui5/webcomponents-react";
 import { MAX_SKILL_NAME_LENGTH, validateSkillName } from "@/lib/domain/validation";
 import { createSkillDefinition, updateSkillDefinition } from "@/lib/skills/repository";
 import { toUserMessage } from "@/lib/errors";
@@ -25,6 +25,15 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
   const [error, setError] = useState<string | null>(null);
   /** A fast second click (or Enter) must not create the skill twice. */
   const [lock] = useState(createOperationLock);
+  const nameInput = useRef<InputDomRef>(null);
+  /**
+   * Counts refused saves. Each one moves focus into the name field once its red state is drawn: UI5
+   * shows the field's error message only while it has focus, so it is visible right away.
+   */
+  const [refusedSaves, setRefusedSaves] = useState(0);
+  useEffect(() => {
+    if (refusedSaves) nameInput.current?.focus();
+  }, [refusedSaves]);
 
   const otherNames = existingNames.filter((n) => n !== skill?.name);
   const nameError = validateSkillName(name, otherNames);
@@ -32,7 +41,10 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
   const save = async () => {
     const saved = await lock.run(async () => {
       setTouched(true);
-      if (nameError) return false;
+      if (nameError) {
+        setRefusedSaves((n) => n + 1);
+        return false;
+      }
       setBusy(true);
       setError(null);
       try {
@@ -88,6 +100,7 @@ export function SkillDialog({ skill, existingNames, onSaved, onClose }: SkillDia
             </Label>
             <Input
               id="skill-name"
+              ref={nameInput}
               value={name}
               maxlength={MAX_SKILL_NAME_LENGTH}
               placeholder={t("skillDialog.namePlaceholder")}
