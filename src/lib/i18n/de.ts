@@ -84,7 +84,7 @@ export const de: Record<MessageKey, string> = {
   "validation.nameExists": "Eine Qualifikation mit dem Namen «{name}» ist bereits vorhanden.",
 
   // Matrix
-  "matrix.personFilter": "Name oder Funktion",
+  "matrix.personFilter": "Name",
   "matrix.people": "Personen",
   "matrix.peopleCount": "Personen ({n})",
   "matrix.jobTitles": "Funktion",

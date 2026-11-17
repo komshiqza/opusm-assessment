@@ -85,7 +85,7 @@ export const en = {
   "validation.nameExists": "A skill named “{name}” already exists.",
 
   // Matrix
-  "matrix.personFilter": "Name or job title",
+  "matrix.personFilter": "Name",
   "matrix.people": "People",
   "matrix.peopleCount": "People ({n})",
   "matrix.jobTitles": "Job title",

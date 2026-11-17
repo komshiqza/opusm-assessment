@@ -19,6 +19,11 @@ describe("filterMatrixRows (the rows the matrix, the CSV export and Bulk assign 
     expect(ids({})).toEqual(["anna", "eli", "dora", "admin"]);
   });
 
+  it("searches names only: the job title has its own filter", () => {
+    expect(ids({ query: "eli" })).toEqual(["eli"]);
+    expect(ids({ query: "electrician" })).toEqual([]);
+  });
+
   it("filters by several job titles", () => {
     expect(ids({ jobTitles: ["Electrician", "Dispatcher"] })).toEqual(["eli", "dora"]);
   });
