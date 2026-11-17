@@ -12,16 +12,19 @@ const CHANGE_EVENT = "skill-management:matrix-job-titles";
  */
 let current: string | null = null;
 
-/** Any stored value → the selected titles: strings only, once each; anything else means nothing selected. */
-export function parseJobTitleSelection(raw: string | null | undefined): string[] {
+/**
+ * The stored choice. null: nothing stored or not readable (counts as "not chosen yet"). An empty
+ * list is an explicit choice: everyone. Only a list of non-empty strings is a choice.
+ */
+export function parseJobTitleSelection(raw: string | null | undefined): string[] | null {
   let stored: unknown = null;
   try {
     stored = raw ? JSON.parse(raw) : null;
   } catch {
-    stored = null;
+    return null;
   }
-  if (!Array.isArray(stored)) return [];
-  return [...new Set(stored.filter((title): title is string => typeof title === "string" && title !== ""))];
+  if (!Array.isArray(stored) || !stored.every((title) => typeof title === "string" && title !== "")) return null;
+  return [...new Set(stored as string[])];
 }
 
 export function readStoredJobTitles(): string {
@@ -40,14 +43,24 @@ export function subscribeJobTitles(onChange: () => void): () => void {
   return () => window.removeEventListener(CHANGE_EVENT, onChange);
 }
 
-/** Nothing selected (the default) removes the stored value. */
+/** The user's choice; nothing selected is kept as "[]" (everyone), so a reload does not bring back the default. */
 export function saveJobTitles(titles: string[]): void {
-  current = titles.length ? JSON.stringify(titles) : "";
+  current = JSON.stringify(titles);
   try {
-    if (current) window.localStorage.setItem(STORAGE_KEY, current);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.setItem(STORAGE_KEY, current);
   } catch {
     // storage blocked or full: the selection lives in this page until it is reloaded
+  }
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+/** Back to "not chosen yet", so the start selection applies again (Reset filters). */
+export function resetJobTitles(): void {
+  current = "";
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // storage blocked: nothing to remove
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }

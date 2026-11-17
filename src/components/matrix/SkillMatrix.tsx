@@ -17,12 +17,12 @@ import { getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { alsoOnNote, linkedRecordNote } from "@/lib/format";
 import { knownSkillIds } from "@/lib/domain/skillFilter";
-import { NO_JOB_TITLE, jobTitleOptions, knownJobTitles } from "@/lib/domain/jobTitleFilter";
+import { NO_JOB_TITLE, isStartJobTitleSelection, jobTitleOptions, knownJobTitles, selectedJobTitles } from "@/lib/domain/jobTitleFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
-import { parseJobTitleSelection, readStoredJobTitles, saveJobTitles, subscribeJobTitles } from "@/lib/jobTitleSelection";
+import { parseJobTitleSelection, readStoredJobTitles, resetJobTitles, saveJobTitles, subscribeJobTitles } from "@/lib/jobTitleSelection";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
@@ -46,7 +46,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const { data, assignmentByCell, alsoOnByCell, certificatesBySkill } = state;
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
-  /** Kept in this browser across reloads, like the tab order. */
+  /** Kept in this browser across reloads, like the tab order; null until the user chooses (start selection). */
   const storedJobTitles = useSyncExternalStore(subscribeJobTitles, readStoredJobTitles, () => "");
   const jobTitles = useMemo(() => parseJobTitleSelection(storedJobTitles), [storedJobTitles]);
   const [storedStatusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
@@ -67,12 +67,15 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     if (data && filterIds !== skillIds) setSkillIds(filterIds);
   }, [data, filterIds, skillIds, setSkillIds]);
 
-  /** Job titles of all loaded persons; a title nobody has any more is dropped. */
+  /** Job titles of all loaded persons; the start selection or the user's choice, without titles nobody has any more. */
   const titleOptions = useMemo(() => jobTitleOptions(data?.persons ?? []), [data]);
-  const titleFilter = knownJobTitles(jobTitles, titleOptions);
+  const titleFilter = useMemo(() => selectedJobTitles(jobTitles, titleOptions), [jobTitles, titleOptions]);
+  // Forget unknown titles in the stored choice too (only with loaded data: before that nothing is known).
   useEffect(() => {
-    if (data && titleFilter !== jobTitles) saveJobTitles(titleFilter);
-  }, [data, titleFilter, jobTitles]);
+    if (!data || jobTitles === null) return;
+    const known = knownJobTitles(jobTitles, titleOptions);
+    if (known !== jobTitles) saveJobTitles(known);
+  }, [data, jobTitles, titleOptions]);
 
   const statusOf = (personId: string, tagId: string) => getAssignmentStatus(assignmentByCell.get(cellKey(personId, tagId)), today);
 
@@ -103,7 +106,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     );
   }
 
-  const filtersActive = Boolean(query || titleFilter.length || filterIds.length || statusFilter !== "all");
+  /** Anything Reset would change (the job titles reset to the start selection, not to nothing). */
+  const filtersActive = Boolean(query || !isStartJobTitleSelection(titleFilter, titleOptions) || filterIds.length || statusFilter !== "all");
 
   /**
    * Where a person's skill sits when not on their main record ("on Employee record"), and a second
@@ -222,7 +226,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
             className={styles.reset}
             onClick={() => {
               setPersonQuery("");
-              saveJobTitles([]);
+              resetJobTitles();
               setSkillIds([]);
               setStatusFilter("all");
             }}
