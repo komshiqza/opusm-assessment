@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_JOB_TITLE } from "@/lib/domain/jobTitleFilter";
-import { filterMatrixRows, peopleTitle, toStatusFilter } from "./matrixRows";
+import { countStatuses, filterMatrixRows, peopleTitle, toStatusFilter } from "./matrixRows";
 
 const rows = [
   { id: "anna", name: "Anna Schneider", jobTitle: "Service Technician" },
@@ -41,6 +41,34 @@ describe("filterMatrixRows (the rows the matrix, the CSV export and Bulk assign 
     expect(ids({ jobTitles: ["Service Technician", "Electrician"], statusFilter: "expired" })).toEqual(["anna", "eli"]);
     // With only First aid shown, Eli's expired Welding no longer counts.
     expect(ids({ jobTitles: ["Service Technician", "Electrician"], statusFilter: "expired", skills: [{ id: "AID" }] })).toEqual(["anna"]);
+  });
+});
+
+describe("countStatuses (the status counters count the people shown, not the status filter)", () => {
+  const counts = (filter: Partial<Parameters<typeof countStatuses>[1]>) => countStatuses(rows, { query: "", jobTitles: [], skills, statusOf, ...filter });
+
+  it("counts every row with no filter set", () => {
+    expect(counts({})).toEqual({ expiring: 0, expired: 2, valid: 1, upcoming: 0 });
+  });
+
+  it("ignores people the Job title filter hides", () => {
+    // Dora (Dispatcher, valid First aid) and Eli (Electrician, expired Welding) are hidden.
+    expect(counts({ jobTitles: ["Service Technician"] })).toEqual({ expiring: 0, expired: 1, valid: 0, upcoming: 0 });
+  });
+
+  it("ignores people the name search hides", () => {
+    expect(counts({ query: "dora" })).toEqual({ expiring: 0, expired: 0, valid: 1, upcoming: 0 });
+  });
+
+  it("counts only the skills shown", () => {
+    expect(counts({ skills: [{ id: "WELD" }] })).toEqual({ expiring: 0, expired: 1, valid: 0, upcoming: 0 });
+  });
+
+  it("does not depend on the status filter: clicking a counter keeps the others, so the user can switch", () => {
+    const filter = { query: "", jobTitles: ["Service Technician", "Dispatcher"], skills, statusOf };
+    const withStatus = { ...filter, statusFilter: "expired" } as Parameters<typeof countStatuses>[1];
+    expect(countStatuses(rows, withStatus)).toEqual(countStatuses(rows, filter));
+    expect(countStatuses(rows, filter)).toEqual({ expiring: 0, expired: 1, valid: 1, upcoming: 0 });
   });
 });
 

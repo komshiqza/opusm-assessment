@@ -26,7 +26,7 @@ import { parseJobTitleSelection, readStoredJobTitles, resetJobTitles, saveJobTit
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
-import { COUNTER_STATUSES, filterMatrixRows, peopleTitle, toStatusFilter, type StatusFilter } from "./matrixRows";
+import { COUNTER_STATUSES, countStatuses, filterMatrixRows, peopleTitle, toStatusFilter, type StatusFilter } from "./matrixRows";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
 import styles from "./SkillMatrix.module.css";
@@ -85,14 +85,11 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   /** The rows shown; the CSV export and Bulk assign take exactly these. */
   const visiblePersons = filterMatrixRows(rows, { query, jobTitles: titleFilter, statusFilter, skills: visibleSkills, statusOf });
 
-  /** Counts over all rows and the visible skills (independent of the person and status filter). */
-  const counts = { upcoming: 0, valid: 0, expiring: 0, expired: 0 };
-  for (const p of rows) {
-    for (const d of visibleSkills) {
-      const s = statusOf(p.id, d.id);
-      if (s !== "none") counts[s]++;
-    }
-  }
+  /**
+   * Counts over the people shown (name search and Job title filter) and the visible skills, so a
+   * counter matches what clicking it lists. Independent of the status filter, so the user can switch.
+   */
+  const counts = countStatuses(rows, { query, jobTitles: titleFilter, skills: visibleSkills, statusOf });
 
   if (!data) return null;
 

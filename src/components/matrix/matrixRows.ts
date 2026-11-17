@@ -14,7 +14,7 @@ export function toStatusFilter(value: unknown): StatusFilter {
   return COUNTER_STATUSES.find((s) => s === value) ?? "all";
 }
 
-/** The matrix filters a row has to pass; the counters do not use them (they count the whole view). */
+/** The matrix filters a row has to pass; the counters use all but the status filter. */
 export interface MatrixRowFilter<S extends { id: string }> {
   /** Person search over the name only (the job title has its own filter), already trimmed and lower-case. */
   query: string;
@@ -37,6 +37,28 @@ export function filterMatrixRows<P extends { id: string; name: string; jobTitle:
     if (statusFilter === "all") return true;
     return skills.some((s) => statusOf(p.id, s.id) === statusFilter);
   });
+}
+
+/** How many cells of each counter status the counters show. */
+export type StatusCounts = Record<CounterStatus, number>;
+
+/**
+ * The status counters: cells of the people shown (name search and Job title filter) over the skills
+ * shown. Never filtered by the status itself, so clicking one counter keeps the others and the user
+ * can switch between them.
+ */
+export function countStatuses<P extends { id: string; name: string; jobTitle: string | null }, S extends { id: string }>(
+  rows: P[],
+  filter: Omit<MatrixRowFilter<S>, "statusFilter">,
+): StatusCounts {
+  const counts: StatusCounts = { expiring: 0, expired: 0, valid: 0, upcoming: 0 };
+  for (const p of filterMatrixRows(rows, { ...filter, statusFilter: "all" })) {
+    for (const s of filter.skills) {
+      const status = toStatusFilter(filter.statusOf(p.id, s.id));
+      if (status !== "all") counts[status]++;
+    }
+  }
+  return counts;
 }
 
 /** The table title with its item counter (Fiori table toolbar): "People (10)"; no counter when nothing is shown. */
