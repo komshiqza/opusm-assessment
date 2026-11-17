@@ -114,7 +114,7 @@ export const de: Record<MessageKey, string> = {
   "matrix.noSkills": "Noch keine Qualifikationen",
   "matrix.noSkillsHint": "Legen Sie Ihre erste Qualifikation im Katalog an und weisen Sie sie anschliessend hier zu.",
   "matrix.goToCatalogue": "Zum Qualifikationskatalog",
-  "matrix.notAssignedList": "Nicht zugewiesen:",
+  "matrix.notAssignedCount": "Nicht zugewiesen ({n})",
   "matrix.cellLabel": "{person}, {skill}: {status}{level}, {certificates}. Bearbeiten.",
   "matrix.cellLevel": ", Stufe {level}",
   "matrix.cellCertificates_one": "1 Zertifikat",

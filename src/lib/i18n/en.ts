@@ -115,7 +115,7 @@ export const en = {
   "matrix.noSkills": "No skills yet",
   "matrix.noSkillsHint": "Create your first skill in the catalogue, then assign it here.",
   "matrix.goToCatalogue": "Go to skill catalogue",
-  "matrix.notAssignedList": "Not assigned:",
+  "matrix.notAssignedCount": "Not assigned ({n})",
   "matrix.cellLabel": "{person}, {skill}: {status}{level}, {certificates}. Edit.",
   "matrix.cellLevel": ", level {level}",
   "matrix.cellCertificates_one": "1 certificate",

@@ -29,6 +29,7 @@ import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
 import { COUNTER_STATUSES, countStatuses, filterMatrixRows, peopleTitle, toStatusFilter, type StatusFilter } from "./matrixRows";
 import { t, tn } from "@/lib/i18n/t";
 import { BulkAssignDialog } from "@/components/bulk/BulkAssignDialog";
+import { NotAssignedSkills } from "./NotAssignedSkills";
 import styles from "./SkillMatrix.module.css";
 
 /** The status counters are the status filter, coloured like their status (always with icon and text). */
@@ -314,25 +315,11 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
                     </li>
                   ))}
               </ul>
-              {visibleSkills.some((d) => !assignmentByCell.has(cellKey(p.id, d.id))) && (
-                <div className={styles.cardMissing}>
-                  <span className={styles.personMeta}>{t("matrix.notAssignedList")}</span>
-                  {visibleSkills
-                    .filter((d) => !assignmentByCell.has(cellKey(p.id, d.id)))
-                    .map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        className={styles.assignChip}
-                        onClick={() => onOpenCell(p, d)}
-                        aria-label={t("matrix.cellNotAssigned", { person: p.name, skill: d.name })}
-                      >
-                        <Icon name="add" className={styles.cellIcon} style={{ color: "inherit" }} />
-                        {d.name}
-                      </button>
-                    ))}
-                </div>
-              )}
+              <NotAssignedSkills
+                person={p}
+                skills={visibleSkills.filter((d) => !assignmentByCell.has(cellKey(p.id, d.id)))}
+                onAssign={(d) => onOpenCell(p, d)}
+              />
             </li>
           ))}
         </ul>

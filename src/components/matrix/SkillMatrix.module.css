@@ -423,13 +423,16 @@
   color: var(--sapTextColor);
 }
 
+/* "Not assigned (n)": a collapsed Panel at the card's foot; its header opens the assign chips. */
 .cardMissing {
+  border-top: 1px solid var(--sapList_BorderColor);
+}
+
+.cardMissingChips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  border-top: 1px solid var(--sapList_BorderColor);
 }
 
 .assignChip {
