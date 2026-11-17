@@ -129,14 +129,16 @@
 
 /*
  * Full width of the card. Fixed layout: the person column keeps its width and the skill columns share
- * the rest equally. Never narrower than the minimum column widths: below that the card scrolls.
+ * the rest equally. Never narrower than 12rem per skill column, at every width: with many skills about
+ * five stay readable side by side and the rest scroll, instead of all of them squeezing in.
  */
 .table {
+  --skill-column-min: 12rem;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
   width: 100%;
-  min-width: calc(14rem + var(--skill-columns, 5) * 9.5rem);
+  min-width: calc(14rem + var(--skill-columns, 5) * var(--skill-column-min));
 }
 
 .table th,
@@ -288,9 +290,9 @@
   white-space: nowrap;
 }
 
-/* Compact matrix (below 1280 px): narrower columns, header text on up to two lines. */
+/* Compact matrix (below 1280 px): narrower person column, short dates, header text on up to two lines. */
 .table[data-compact] {
-  min-width: calc(10rem + var(--skill-columns, 5) * 6.5rem);
+  min-width: calc(10rem + var(--skill-columns, 5) * var(--skill-column-min));
 }
 
 .table[data-compact] .skillHeader {
@@ -317,7 +319,7 @@
   }
 
   .table[data-compact] {
-    min-width: calc(8.5rem + var(--skill-columns, 5) * 6.25rem);
+    min-width: calc(8.5rem + var(--skill-columns, 5) * var(--skill-column-min));
   }
 
   .table[data-compact] .skillHeader {
