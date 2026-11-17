@@ -129,8 +129,8 @@
 
 /*
  * Full width of the card. Fixed layout: the person column keeps its width and the skill columns share
- * the rest equally. Never narrower than 12rem per skill column, at every width: with many skills about
- * five stay readable side by side and the rest scroll, instead of all of them squeezing in.
+ * the rest equally. On desktop (1024 px and wider) never narrower than 12rem per skill column: with many
+ * skills about five stay readable side by side and the rest scroll, instead of all of them squeezing in.
  */
 .table {
   --skill-column-min: 12rem;
@@ -318,8 +318,9 @@
     min-width: 8.5rem;
   }
 
+  /* Tablets keep narrow skill columns (about 5 side by side); the 12rem minimum is for desktop widths. */
   .table[data-compact] {
-    min-width: calc(8.5rem + var(--skill-columns, 5) * var(--skill-column-min));
+    min-width: calc(8.5rem + var(--skill-columns, 5) * 6.25rem);
   }
 
   .table[data-compact] .skillHeader {
