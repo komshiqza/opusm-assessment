@@ -40,7 +40,7 @@ import { ExpiryOverview } from "./expiry/ExpiryOverview";
 import { FindTechnician } from "./findTechnician/FindTechnician";
 import styles from "./SkillManagementApp.module.css";
 
-/** Tab labels; below tablet width short ones, so all four tabs fit next to each other. */
+/** Tab labels; short ones up to 899 px (incl. tablets), so all four tabs fit next to each other. */
 const TAB_LABELS: Record<TabKey, { full: MessageKey; short: MessageKey }> = {
   matrix: { full: "tab.matrix", short: "tab.matrix.short" },
   expiry: { full: "tab.expiry", short: "tab.expiry.short" },
