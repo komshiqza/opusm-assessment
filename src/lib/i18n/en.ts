@@ -17,8 +17,8 @@ export const en = {
   "app.resetTabs": "Reset tab order",
   "tab.matrix": "Skill matrix",
   "tab.matrix.short": "Matrix",
-  "tab.expiry": "Expiring soon",
-  "tab.expiry.short": "Expiring",
+  "tab.expiry": "Expiry overview",
+  "tab.expiry.short": "Expiry",
   "tab.find": "Find technician for a job",
   "tab.find.short": "Find",
   "tab.catalogue": "Skill catalogue",
@@ -127,7 +127,7 @@ export const en = {
   "csv.jobTitle": "Job title",
   "csv.column": "{skill} – {column}",
 
-  // Expiring soon
+  // Expiry overview
   "expiry.endsWithin": "Ends within",
   "expiry.days": "the next {n} days",
   "expiry.includeExpired": "Include already expired",

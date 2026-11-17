@@ -16,7 +16,7 @@ export const de: Record<MessageKey, string> = {
   "app.resetTabs": "Tab-Reihenfolge zurücksetzen",
   "tab.matrix": "Qualifikationsmatrix",
   "tab.matrix.short": "Matrix",
-  "tab.expiry": "Bald ablaufend",
+  "tab.expiry": "Ablaufübersicht",
   "tab.expiry.short": "Ablauf",
   "tab.find": "Techniker für einen Einsatz finden",
   "tab.find.short": "Suchen",
@@ -126,7 +126,7 @@ export const de: Record<MessageKey, string> = {
   "csv.jobTitle": "Funktion",
   "csv.column": "{skill} – {column}",
 
-  // Expiring soon
+  // Expiry overview
   "expiry.endsWithin": "Ablauf innerhalb",
   "expiry.days": "der nächsten {n} Tage",
   "expiry.includeExpired": "Bereits abgelaufene einschliessen",
