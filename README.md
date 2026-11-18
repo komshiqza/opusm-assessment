@@ -14,16 +14,16 @@ Live version: https://opusm-assessment.vercel.app (deployed automatically by Ver
 
 As in the template's quick start: Node.js 22 or newer, `npm install`, `cp .env.example .env.local` (set `NEXT_PUBLIC_CANDIDATE_ID=komshiqza`, leave the FSM values as they are), `npm run check:fsm`, `npm run dev`.
 
-One script was added: `npm test` runs 441 unit tests with [Vitest](https://vitest.dev/), against a fake FSM, so no FSM connection is needed. GitHub Actions runs typecheck, lint, the tests and the build on every push to `main`, without any secrets.
+One script was added: `npm test` runs 452 unit tests with [Vitest](https://vitest.dev/), against a fake FSM, so no FSM connection is needed. GitHub Actions runs typecheck, lint, the tests and the build on every push to `main`, without any secrets.
 
 ## What the app does
 
-Four tabs. The app opens on "Find technician for a job", the shortest path to the right person for a job. The tabs can be reordered by dragging; the order is saved in the user's browser.
+Four tabs. The app opens on the Skill matrix, followed by "Find technician for a job", "Expiry overview" and "Skill catalogue". The tabs can be reordered by dragging; the order is saved in the user's browser.
 
 - **Skill matrix** (required). One row per real person, the skills as columns. Each cell shows the status as icon and text (valid, expiring within 30 days, expired, starts later, not assigned), the end date, the level and the number of certificates. Filters: person name, skills and job title. The coloured status counters above the table ("10 expiring soon", "7 expired", …) are the status filter: one click shows only those people, a second click shows everyone again. The header row and the name column stay in place when the table scrolls down or sideways. "Show each FSM record (26)" switches to one row per FSM Person record, so the matrix can also be seen with 25+ rows (see "Who is a row"). On desktop each skill column keeps a readable width, about five side by side, and the rest scroll sideways; tablets keep narrower columns; on a phone the matrix becomes one card per person.
 - **Assign skills** (required). Clicking a cell opens the assignment dialog: assign, set level and validity, upload certificates in the same step, view, download or delete them, remove the assignment. "Valid to" before "valid from" blocks saving.
 - **Skill catalogue** (required). Create, rename and delete skills, with counts of assignments and certificates per skill.
-- **Find technician for a job** (extra). The brief's own risk is a technician sent to a job with an expired certificate. The manager picks the skills a job needs, optionally a minimum level, and the date. The app lists who has all of them valid on that day, and who is "almost" there, with the reason, for example "Welding (steel): Advanced, Expert needed". It uses only data already loaded: no extra FSM calls.
+- **Find technician for a job** (extra). The brief's own risk is a technician sent to a job with an expired certificate. The manager picks the skills a job needs, optionally a minimum level, and the date; the Job title filter starts on "Service Technician", as in the matrix. The app lists who has all of them valid on that day, and who is "almost" there, with the reason, for example "Welding (steel): Advanced, Expert needed". It uses only data already loaded: no extra FSM calls.
 - **Expiry overview** (optional). Everything that ends within a chosen period (30, 60, 90, 180 or 365 days; 30 by default), soonest first, with or without what has already expired.
 - **All skills of one person** (optional). Click a name. Without the edit action this view is read-only, so a technician self-service view could reuse it as is.
 - **One skill to several persons** (optional). "Bulk assign", up to 25 persons, each checked like a single assignment; the result is listed per person.
