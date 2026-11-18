@@ -3,26 +3,30 @@ import { DEFAULT_TAB_ORDER, isDefaultTabOrder, moveTab, parseTabOrder } from "./
 
 describe("parseTabOrder", () => {
   it("uses the default order when nothing valid is stored", () => {
-    expect(DEFAULT_TAB_ORDER).toEqual(["find", "matrix", "expiry", "catalogue"]);
+    expect(DEFAULT_TAB_ORDER).toEqual(["matrix", "find", "expiry", "catalogue"]);
     for (const raw of [null, "", "not json", "{}", "[1,2]"]) expect(parseTabOrder(raw)).toEqual(DEFAULT_TAB_ORDER);
   });
 
   it("keeps a stored order, drops unknown and duplicate keys, appends missing tabs", () => {
     expect(parseTabOrder('["catalogue","matrix"]')).toEqual(["catalogue", "matrix", "find", "expiry"]);
-    expect(parseTabOrder('["expiry","hack","expiry","catalogue"]')).toEqual(["expiry", "catalogue", "find", "matrix"]);
+    expect(parseTabOrder('["expiry","hack","expiry","catalogue"]')).toEqual(["expiry", "catalogue", "matrix", "find"]);
+  });
+
+  it("keeps a visitor's stored order, also the earlier default with Find technician first", () => {
+    expect(parseTabOrder('["find","matrix","expiry","catalogue"]')).toEqual(["find", "matrix", "expiry", "catalogue"]);
   });
 });
 
 describe("moveTab", () => {
   it("moves a tab before or after another", () => {
-    expect(moveTab(DEFAULT_TAB_ORDER, "catalogue", "matrix", "Before")).toEqual(["find", "catalogue", "matrix", "expiry"]);
+    expect(moveTab(DEFAULT_TAB_ORDER, "catalogue", "find", "Before")).toEqual(["matrix", "catalogue", "find", "expiry"]);
     expect(moveTab(DEFAULT_TAB_ORDER, "find", "expiry", "After")).toEqual(["matrix", "expiry", "find", "catalogue"]);
     expect(moveTab(DEFAULT_TAB_ORDER, "find", "find", "After")).toEqual(DEFAULT_TAB_ORDER);
   });
 
   it("knows the default order", () => {
     expect(isDefaultTabOrder(DEFAULT_TAB_ORDER)).toBe(true);
-    expect(isDefaultTabOrder(moveTab(DEFAULT_TAB_ORDER, "matrix", "find", "Before"))).toBe(false);
+    expect(isDefaultTabOrder(moveTab(DEFAULT_TAB_ORDER, "find", "matrix", "Before"))).toBe(false);
   });
 });
 

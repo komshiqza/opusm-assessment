@@ -27,6 +27,11 @@ export function matchesJobTitles(person: { jobTitle: string | null }, selected: 
   return selected.includes(titleOf(person) ?? NO_JOB_TITLE);
 }
 
+/** The persons the filter shows, in their order (everyone when nothing is selected). */
+export function withJobTitles<P extends { jobTitle: string | null }>(persons: P[], selected: string[]): P[] {
+  return persons.filter((person) => matchesJobTitles(person, selected));
+}
+
 /**
  * The selection without titles no loaded person has any more (e.g. after a refresh), like a deleted
  * skill in the Skills filter. Returns the same array when nothing was dropped.

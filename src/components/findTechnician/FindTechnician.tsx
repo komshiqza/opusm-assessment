@@ -27,6 +27,10 @@ import { validateValidity } from "@/lib/domain/validation";
 import { formatDate } from "@/lib/format";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
+import { useJobTitleFilter } from "@/hooks/useJobTitleFilter";
+import { withJobTitles } from "@/lib/domain/jobTitleFilter";
+import { findJobTitleStore } from "@/lib/jobTitleSelection";
+import { JobTitleFilter } from "@/components/common/JobTitleFilter";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY } from "@/components/matrix/statusDisplay";
 import { NoJobTitleTag } from "@/components/common/NoJobTitleTag";
@@ -65,7 +69,12 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
    * One row per real person (the shared list from UnifiedPerson, see src/lib/domain/persons.ts); each
    * skill counts with the best assignment across the person's Person records (ERP user, Employee).
    */
-  const people = useMemo(() => (state.data?.persons ?? []).map((person) => ({ person, records: person.records })), [state.data]);
+  const { options: titleOptions, selected: titleFilter } = useJobTitleFilter(findJobTitleStore, state.data?.persons);
+  /** Only the people the Job title filter shows: the headline and every count below count only them. */
+  const people = useMemo(
+    () => withJobTitles(state.data?.persons ?? [], titleFilter).map((person) => ({ person, records: person.records })),
+    [state.data, titleFilter],
+  );
   const holder = heldAcrossRecords(people, (recordId, skillId) => state.assignmentByRecord.get(cellKey(recordId, skillId)), jobDate, today, minLevel);
   const lookup = (personId: string, skillId: string) => holder(personId, skillId)?.held;
   /** People without a job title are not technicians: listed after them, and only if they hold a required skill. */
@@ -189,6 +198,10 @@ export function FindTechnician({ state, onOpen, onOpenPerson }: FindTechnicianPr
               valueStateMessage={<div>{dateError}</div>}
               onChange={(e) => setJobDate(e.target.value ?? "")}
             />
+          </div>
+          <div className={styles.field}>
+            <Label for="find-job-title">{t("matrix.jobTitles")}</Label>
+            <JobTitleFilter id="find-job-title" options={titleOptions} selected={titleFilter} onChange={findJobTitleStore.save} />
           </div>
         </div>
       </section>

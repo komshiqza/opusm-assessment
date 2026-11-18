@@ -135,6 +135,58 @@ describe("storage (fresh module per test, as on a page load)", () => {
       }
     });
   });
+
+  describe("Find technician's own selection (same rules, its own stored value)", () => {
+    const FIND_KEY = "skill-management.find-job-titles";
+    const findShownOf = (store: Awaited<ReturnType<typeof load>>) => selectedJobTitles(store.parseJobTitleSelection(store.findJobTitleStore.read()), options);
+
+    it("starts on Service Technician; clearing it is kept as everyone, also after a reload", async () => {
+      const values = new Map<string, string>();
+      fakeWindow(mapStorage(values));
+      const store = await load();
+      expect(findShownOf(store)).toEqual(["Service Technician"]);
+      store.findJobTitleStore.save([]);
+      expect(values.get(FIND_KEY)).toBe("[]");
+      expect(findShownOf(await reload())).toEqual([]);
+    });
+
+    it("keeps a chosen title after a reload and drops one nobody has any more", async () => {
+      const values = new Map<string, string>();
+      fakeWindow(mapStorage(values));
+      (await load()).findJobTitleStore.save([NO_JOB_TITLE, "Mechanic"]);
+      expect(findShownOf(await reload())).toEqual([NO_JOB_TITLE]);
+    });
+
+    it("is not changed by the matrix filter or its 'Show each FSM record' switch, and does not change them", async () => {
+      const values = new Map<string, string>();
+      fakeWindow(mapStorage(values));
+      const store = await load();
+      store.findJobTitleStore.save([NO_JOB_TITLE]);
+      store.restoreStoredJobTitles("[]"); // the matrix's record switch sets its choice aside
+      store.saveJobTitles(["Service Technician"]);
+      store.resetJobTitles();
+      expect(values.get(FIND_KEY)).toBe(`["${NO_JOB_TITLE}"]`);
+      expect(findShownOf(store)).toEqual([NO_JOB_TITLE]);
+      expect(await shownOf(store)).toEqual(["Service Technician"]);
+      store.findJobTitleStore.reset();
+      expect(values.has(FIND_KEY)).toBe(false);
+      expect(values.has(KEY)).toBe(false);
+    });
+
+    it("tells only its own listeners about a change", async () => {
+      const events: string[] = [];
+      vi.stubGlobal("window", {
+        localStorage: mapStorage(new Map()),
+        dispatchEvent: (e: Event) => events.push(e.type),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      });
+      const store = await load();
+      store.findJobTitleStore.save([]);
+      store.saveJobTitles([]);
+      expect(events).toEqual(["skill-management:find-job-titles", "skill-management:matrix-job-titles"]);
+    });
+  });
 });
 
 describe("recordViewTitles ('Show each FSM record' lists every record, so it sets the Job title choice aside)", () => {

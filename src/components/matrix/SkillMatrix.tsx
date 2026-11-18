@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Button,
   CheckBox,
@@ -18,21 +18,15 @@ import { getAssignmentStatus } from "@/lib/domain/status";
 import { useToday } from "@/hooks/useToday";
 import { alsoOnNote, linkedRecordNote } from "@/lib/format";
 import { knownSkillIds } from "@/lib/domain/skillFilter";
-import { NO_JOB_TITLE, isStartJobTitleSelection, jobTitleOptions, knownJobTitles, selectedJobTitles } from "@/lib/domain/jobTitleFilter";
+import { isStartJobTitleSelection } from "@/lib/domain/jobTitleFilter";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCanScrollRight } from "@/hooks/useCanScrollRight";
 import { useFillHeight } from "@/hooks/useFillHeight";
 import { cellKey, type SkillDataState } from "@/hooks/useSkillData";
 import { usePageState } from "@/hooks/usePageState";
-import {
-  parseJobTitleSelection,
-  readStoredJobTitles,
-  recordViewTitles,
-  resetJobTitles,
-  restoreStoredJobTitles,
-  saveJobTitles,
-  subscribeJobTitles,
-} from "@/lib/jobTitleSelection";
+import { useJobTitleFilter } from "@/hooks/useJobTitleFilter";
+import { matrixJobTitleStore, readStoredJobTitles, recordViewTitles, resetJobTitles, restoreStoredJobTitles, saveJobTitles } from "@/lib/jobTitleSelection";
+import { JobTitleFilter } from "@/components/common/JobTitleFilter";
 import type { Person, SkillDefinition } from "@/lib/skills/types";
 import { STATUS_DISPLAY, compactStatusText, statusText } from "./statusDisplay";
 import { csvFileName, downloadCsv, matrixCsv } from "./matrixCsv";
@@ -59,9 +53,6 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
   const { data, assignmentByCell, alsoOnByCell, certificatesBySkill } = state;
   const [personQuery, setPersonQuery] = usePageState("matrix.personQuery", "");
   const [skillIds, setSkillIds] = usePageState<string[]>("matrix.skillIds", []);
-  /** Kept in this browser across reloads, like the tab order; null until the user chooses (start selection). */
-  const storedJobTitles = useSyncExternalStore(subscribeJobTitles, readStoredJobTitles, () => "");
-  const jobTitles = useMemo(() => parseJobTitleSelection(storedJobTitles), [storedJobTitles]);
   const [storedStatusFilter, setStatusFilter] = usePageState<StatusFilter>("matrix.statusFilter", "all");
   const statusFilter = toStatusFilter(storedStatusFilter);
   const today = useToday();
@@ -101,15 +92,8 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
     if (data && filterIds !== skillIds) setSkillIds(filterIds);
   }, [data, filterIds, skillIds, setSkillIds]);
 
-  /** Job titles of all loaded persons; the start selection or the user's choice, without titles nobody has any more. */
-  const titleOptions = useMemo(() => jobTitleOptions(data?.persons ?? []), [data]);
-  const titleFilter = useMemo(() => selectedJobTitles(jobTitles, titleOptions), [jobTitles, titleOptions]);
-  // Forget unknown titles in the stored choice too (only with loaded data: before that nothing is known).
-  useEffect(() => {
-    if (!data || jobTitles === null) return;
-    const known = knownJobTitles(jobTitles, titleOptions);
-    if (known !== jobTitles) saveJobTitles(known);
-  }, [data, jobTitles, titleOptions]);
+  /** Kept in this browser across reloads, like the tab order: the start selection until the user chooses. */
+  const { options: titleOptions, selected: titleFilter } = useJobTitleFilter(matrixJobTitleStore, data?.persons);
 
   /** A row's assignment of a skill: the person's cell (person rows), or exactly this record's (record rows). */
   const assignmentOf = (rowId: string, tagId: string) => (eachRecord ? state.assignmentByRecord : assignmentByCell).get(cellKey(rowId, tagId));
@@ -243,20 +227,7 @@ export function SkillMatrix({ state, onOpenCell, onOpenPerson, onGoToCatalogue }
         </div>
         <div className={styles.field}>
           <Label for="matrix-job-title-filter">{t("matrix.jobTitles")}</Label>
-          <MultiComboBox
-            id="matrix-job-title-filter"
-            placeholder={t("matrix.allJobTitles")}
-            onSelectionChange={(e) => saveJobTitles(e.detail.items.map((i) => String(i.dataset.id)))}
-          >
-            {titleOptions.map((title) => (
-              <MultiComboBoxItem
-                key={title}
-                data-id={title}
-                text={title === NO_JOB_TITLE ? t("matrix.noJobTitle") : title}
-                selected={titleFilter.includes(title)}
-              />
-            ))}
-          </MultiComboBox>
+          <JobTitleFilter id="matrix-job-title-filter" options={titleOptions} selected={titleFilter} onChange={saveJobTitles} />
         </div>
         <div className={styles.field}>
           <Label for="matrix-skill-filter">{t("matrix.skills")}</Label>

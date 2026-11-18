@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkSkillForJob, heldAcrossRecords, jobDayLabel, matchTechnicians, minimumLevelLabel } from "./jobMatch";
+import { NO_JOB_TITLE, jobTitleOptions, selectedJobTitles, withJobTitles } from "./jobTitleFilter";
 import { buildPeople } from "./persons";
 import { isValidOn } from "./status";
 
@@ -109,6 +110,54 @@ describe("matchTechnicians", () => {
 
   it("returns nothing when no skill is required", () => {
     expect(matchTechnicians(persons, [], lookup, JOB, TODAY, null)).toEqual({ ready: [], almost: [], missingOne: [], others: 0 });
+  });
+});
+
+describe("Find technician with the Job title filter: only the people shown are counted", () => {
+  const persons = [
+    { id: "anna", name: "anna", jobTitle: "Service Technician" }, // ready
+    { id: "ben", name: "ben", jobTitle: "Service Technician" }, // almost: First aid ends before the job
+    { id: "cara", name: "cara", jobTitle: "Electrician" }, // misses one skill
+    { id: "dino", name: "dino", jobTitle: "Service Technician" }, // has nothing
+    { id: "eli", name: "eli", jobTitle: null }, // no job title, holds both
+    { id: "fay", name: "fay", jobTitle: null }, // no job title, holds nothing: never listed
+  ];
+  const held: Record<string, ReturnType<typeof assignment>> = {
+    "anna|aid": assignment(),
+    "anna|heights": assignment(),
+    "ben|aid": assignment({ endDate: "2026-12-09" }),
+    "ben|heights": assignment(),
+    "cara|aid": assignment(),
+    "eli|aid": assignment(),
+    "eli|heights": assignment(),
+  };
+  const options = jobTitleOptions(persons);
+  const counts = (stored: string[] | null) => {
+    const shown = withJobTitles(persons, selectedJobTitles(stored, options));
+    const r = matchTechnicians(shown, [firstAid, heights], (p, s) => held[`${p}|${s}`], JOB, TODAY, null, (p) => Boolean(p.jobTitle));
+    return {
+      ready: r.ready.map((x) => x.person.id),
+      almost: r.almost.map((x) => x.person.id),
+      missingOne: r.missingOne.map((x) => x.person.id),
+      others: r.others,
+    };
+  };
+
+  it.each([
+    ["nothing stored: the default, Service Technician", null, { ready: ["anna"], almost: ["ben"], missingOne: [], others: 1 }],
+    ["cleared (explicit everyone): people without a job title come back", [], { ready: ["anna", "eli"], almost: ["ben"], missingOne: ["cara"], others: 1 }],
+    ["only 'No job title'", [NO_JOB_TITLE], { ready: ["eli"], almost: [], missingOne: [], others: 0 }],
+    ["Electrician", ["Electrician"], { ready: [], almost: [], missingOne: ["cara"], others: 0 }],
+    ["a title nobody has any more: everyone", ["Mechanic"], { ready: ["anna", "eli"], almost: ["ben"], missingOne: ["cara"], others: 1 }],
+  ] as const)("%s", (_case, stored, expected) => {
+    expect(counts(stored === null ? null : [...stored])).toEqual(expected);
+  });
+
+  it("keeps the persons' order and the same objects", () => {
+    const shown = withJobTitles(persons, ["Service Technician"]);
+    expect(shown.map((p) => p.id)).toEqual(["anna", "ben", "dino"]);
+    expect(shown[0]).toBe(persons[0]);
+    expect(withJobTitles(persons, [])).toEqual(persons);
   });
 });
 

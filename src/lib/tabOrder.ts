@@ -7,10 +7,11 @@
 export type TabKey = "matrix" | "expiry" | "find" | "catalogue";
 
 /**
- * Find technician first: the shortest path to the right person for a job. The app opens on the first
- * tab of the current order. The catalogue is setup and used rarely.
+ * The Skill matrix first: the app opens on the first tab of the current order, and the matrix is the
+ * overview of who holds which skill. Find technician next, for the right person for a job. The
+ * catalogue is setup and used rarely. A visitor's own stored order stays as it is.
  */
-export const DEFAULT_TAB_ORDER: TabKey[] = ["find", "matrix", "expiry", "catalogue"];
+export const DEFAULT_TAB_ORDER: TabKey[] = ["matrix", "find", "expiry", "catalogue"];
 
 const STORAGE_KEY = "skill-management.tab-order";
 const CHANGE_EVENT = "skill-management:tab-order";
